@@ -26,7 +26,7 @@ export default function Sales() {
 
   const [formData, setFormData] = useState({
     productId: "",
-    quantity: "",
+    totalAmount: "",
     notes: "",
   });
 
@@ -59,7 +59,7 @@ export default function Sales() {
   const resetForm = () => {
     setFormData({
       productId: "",
-      quantity: "",
+      totalAmount: "",
       notes: "",
     });
     setSelectedProduct(null);
@@ -71,9 +71,9 @@ export default function Sales() {
     setFormData({ ...formData, productId });
   };
 
-  const calculateTotal = () => {
-    if (!selectedProduct || !formData.quantity) return 0;
-    return parseFloat(formData.quantity) * selectedProduct.sellingPrice;
+  const calculateQuantity = () => {
+    if (!selectedProduct || !formData.totalAmount) return 0;
+    return parseFloat(formData.totalAmount) / selectedProduct.sellingPrice;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -88,7 +88,8 @@ export default function Sales() {
       return;
     }
 
-    const quantity = parseFloat(formData.quantity);
+    const totalAmount = parseFloat(formData.totalAmount);
+    const quantity = calculateQuantity();
 
     if (quantity > selectedProduct.currentStock) {
       toast({
@@ -105,7 +106,7 @@ export default function Sales() {
         productName: selectedProduct.name,
         quantity,
         unitPrice: selectedProduct.sellingPrice,
-        totalAmount: calculateTotal(),
+        totalAmount,
         date: new Date(),
         notes: formData.notes,
       };
@@ -267,24 +268,27 @@ export default function Sales() {
                 </div>
 
                 <div>
-                  <Label htmlFor="quantity">Quantity Sold</Label>
+                  <Label htmlFor="totalAmount">Total Amount Sold (KSh)</Label>
                   <Input
-                    id="quantity"
+                    id="totalAmount"
                     type="number"
                     step="0.01"
                     min="0.01"
-                    max={selectedProduct.currentStock}
-                    value={formData.quantity}
-                    onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
+                    placeholder="Enter total sales amount"
+                    value={formData.totalAmount}
+                    onChange={(e) => setFormData({ ...formData, totalAmount: e.target.value })}
                     required
                   />
                 </div>
 
-                {formData.quantity && (
+                {formData.totalAmount && (
                   <div className="rounded-lg bg-primary/20 p-4">
-                    <p className="text-sm text-muted-foreground mb-1">Total Amount</p>
+                    <p className="text-sm text-muted-foreground mb-1">Calculated Quantity</p>
                     <p className="text-2xl font-bold text-primary">
-                      KSh {calculateTotal().toLocaleString()}
+                      {calculateQuantity().toFixed(2)} units
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      @ KSh {selectedProduct.sellingPrice} per unit
                     </p>
                   </div>
                 )}
@@ -313,7 +317,7 @@ export default function Sales() {
               >
                 Cancel
               </Button>
-              <Button type="submit" disabled={!selectedProduct || !formData.quantity}>
+              <Button type="submit" disabled={!selectedProduct || !formData.totalAmount}>
                 Record Sale
               </Button>
             </div>
