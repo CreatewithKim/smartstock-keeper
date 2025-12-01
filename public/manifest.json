@@ -1,0 +1,24 @@
+{
+  "name": "SmartStock Tracker",
+  "short_name": "SmartStock",
+  "description": "Offline-first inventory management system",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#e8f4f6",
+  "theme_color": "#1ba4b8",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
