@@ -1,9 +1,9 @@
-import { ReactNode } from "react";
+import { ReactNode, useState } from "react";
 import { Package, LayoutDashboard, ShoppingCart, FileText, Settings, Menu } from "lucide-react";
 import { NavLink } from "./NavLink";
-import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "./ui/button";
+import { PWAStatus } from "./PWAStatus";
 
 interface LayoutProps {
   children: ReactNode;
@@ -26,14 +26,17 @@ export const Layout = ({ children }: LayoutProps) => {
       <header className="glass-strong fixed top-0 left-0 right-0 z-50 h-16 lg:hidden">
         <div className="container flex h-full items-center justify-between px-4">
           <h1 className="text-xl font-bold text-primary">SmartStock</h1>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            className="lg:hidden"
-          >
-            <Menu className="h-6 w-6" />
-          </Button>
+          <div className="flex items-center gap-2">
+            <PWAStatus />
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              className="lg:hidden"
+            >
+              <Menu className="h-6 w-6" />
+            </Button>
+          </div>
         </div>
       </header>
 
@@ -57,6 +60,9 @@ export const Layout = ({ children }: LayoutProps) => {
             <div className="hidden lg:block">
               <h1 className="text-2xl font-bold text-primary">SmartStock</h1>
               <p className="text-sm text-muted-foreground">Inventory Tracker</p>
+              <div className="mt-3">
+                <PWAStatus />
+              </div>
             </div>
 
             <nav className="space-y-2">
