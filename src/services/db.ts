@@ -4,7 +4,7 @@ export interface Product {
   id?: number;
   name: string;
   category: string;
-  costPrice: number;
+  quantityKg: number;
   sellingPrice: number;
   currentStock: number;
   initialStock: number;
@@ -228,7 +228,7 @@ export const dataUtils = {
     switch (type) {
       case 'products':
         data = await productDB.getAll();
-        headers = ['ID', 'Name', 'Category', 'Cost Price', 'Selling Price', 'Current Stock', 'Low Stock Threshold'];
+        headers = ['ID', 'Name', 'Category', 'Quantity (Kg)', 'Selling Price', 'Current Stock', 'Low Stock Threshold'];
         break;
       case 'sales':
         data = await salesDB.getAll();
@@ -244,7 +244,7 @@ export const dataUtils = {
       headers.join(','),
       ...data.map(row => {
         if (type === 'products') {
-          return [row.id, row.name, row.category, row.costPrice, row.sellingPrice, row.currentStock, row.lowStockThreshold].join(',');
+          return [row.id, row.name, row.category, row.quantityKg, row.sellingPrice, row.currentStock, row.lowStockThreshold].join(',');
         } else if (type === 'sales') {
           return [row.id, row.productName, row.quantity, row.unitPrice, row.totalAmount, row.date.toISOString()].join(',');
         } else {
