@@ -1,7 +1,7 @@
-const CACHE_NAME = 'smartstock-v2';
-const DYNAMIC_CACHE = 'smartstock-dynamic-v1';
+const CACHE_NAME = 'smartstock-v3';
+const DYNAMIC_CACHE = 'smartstock-dynamic-v2';
 
-// Install service worker
+// Install service worker - cache shell immediately
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
@@ -35,7 +35,7 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// Fetch strategy: Network First for HTML/API, Cache First for assets
+// Fetch strategy: Cache First with Network Fallback for offline support
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
@@ -46,7 +46,7 @@ self.addEventListener('fetch', (event) => {
   // Skip chrome-extension and other non-http requests
   if (!url.protocol.startsWith('http')) return;
 
-  // For navigation requests (HTML pages), use Network First
+  // For navigation requests (HTML pages), use Network First with offline fallback
   if (request.mode === 'navigate') {
     event.respondWith(
       fetch(request)
@@ -57,37 +57,31 @@ self.addEventListener('fetch', (event) => {
           });
           return response;
         })
-        .catch(() => caches.match(request) || caches.match('/'))
+        .catch(async () => {
+          const cachedResponse = await caches.match(request);
+          if (cachedResponse) return cachedResponse;
+          return caches.match('/');
+        })
     );
     return;
   }
 
-  // For assets (JS, CSS, images), use Cache First
+  // For all other requests (JS, CSS, images, fonts), use Stale-While-Revalidate
   event.respondWith(
     caches.match(request).then((cachedResponse) => {
-      if (cachedResponse) {
-        return cachedResponse;
-      }
-
-      return fetch(request)
-        .then((response) => {
-          if (!response || response.status !== 200) {
-            return response;
+      const fetchPromise = fetch(request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            const responseClone = networkResponse.clone();
+            caches.open(DYNAMIC_CACHE).then((cache) => {
+              cache.put(request, responseClone);
+            });
           }
-
-          const responseClone = response.clone();
-          caches.open(DYNAMIC_CACHE).then((cache) => {
-            cache.put(request, responseClone);
-          });
-
-          return response;
+          return networkResponse;
         })
-        .catch(() => {
-          // Return offline fallback for images
-          if (request.destination === 'image') {
-            return new Response('', { status: 404 });
-          }
-        });
+        .catch(() => cachedResponse);
+
+      return cachedResponse || fetchPromise;
     })
   );
 });
