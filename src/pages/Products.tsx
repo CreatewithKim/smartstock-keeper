@@ -33,7 +33,7 @@ export default function Products() {
   const [formData, setFormData] = useState({
     name: "",
     category: "",
-    costPrice: "",
+    quantityKg: "",
     sellingPrice: "",
     currentStock: "",
     initialStock: "",
@@ -69,7 +69,7 @@ export default function Products() {
     setFormData({
       name: "",
       category: "",
-      costPrice: "",
+      quantityKg: "",
       sellingPrice: "",
       currentStock: "",
       initialStock: "",
@@ -88,11 +88,11 @@ export default function Products() {
     setFormData({
       name: product.name,
       category: product.category,
-      costPrice: product.costPrice.toString(),
-      sellingPrice: product.sellingPrice.toString(),
-      currentStock: product.currentStock.toString(),
-      initialStock: product.initialStock.toString(),
-      lowStockThreshold: product.lowStockThreshold.toString(),
+      quantityKg: product.quantityKg.toFixed(2),
+      sellingPrice: product.sellingPrice.toFixed(2),
+      currentStock: product.currentStock.toFixed(2),
+      initialStock: product.initialStock.toFixed(2),
+      lowStockThreshold: product.lowStockThreshold.toFixed(2),
     });
     setIsAddDialogOpen(true);
   };
@@ -104,11 +104,11 @@ export default function Products() {
       const productData = {
         name: formData.name,
         category: formData.category,
-        costPrice: parseFloat(formData.costPrice),
-        sellingPrice: parseFloat(formData.sellingPrice),
-        currentStock: parseFloat(formData.currentStock),
-        initialStock: parseFloat(formData.initialStock),
-        lowStockThreshold: parseFloat(formData.lowStockThreshold),
+        quantityKg: parseFloat(parseFloat(formData.quantityKg).toFixed(2)),
+        sellingPrice: parseFloat(parseFloat(formData.sellingPrice).toFixed(2)),
+        currentStock: parseFloat(parseFloat(formData.currentStock).toFixed(2)),
+        initialStock: parseFloat(parseFloat(formData.initialStock).toFixed(2)),
+        lowStockThreshold: parseFloat(parseFloat(formData.lowStockThreshold).toFixed(2)),
         createdAt: editingProduct?.createdAt || new Date(),
         updatedAt: new Date(),
       };
@@ -282,11 +282,11 @@ export default function Products() {
                 <div className="grid grid-cols-2 gap-3 text-sm">
                   <div>
                     <p className="text-muted-foreground">Stock</p>
-                    <p className="font-semibold text-foreground">{product.currentStock}</p>
+                    <p className="font-semibold text-foreground">{product.currentStock.toFixed(2)}</p>
                   </div>
                   <div>
                     <p className="text-muted-foreground">Selling Price</p>
-                    <p className="font-semibold text-primary">KSh {product.sellingPrice}</p>
+                    <p className="font-semibold text-primary">KSh {product.sellingPrice.toFixed(2)}</p>
                   </div>
                 </div>
 
@@ -344,13 +344,13 @@ export default function Products() {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="costPrice">Cost Price (KSh)</Label>
+                <Label htmlFor="quantityKg">Quantity (Kg)</Label>
                 <Input
-                  id="costPrice"
+                  id="quantityKg"
                   type="number"
                   step="0.01"
-                  value={formData.costPrice}
-                  onChange={(e) => setFormData({ ...formData, costPrice: e.target.value })}
+                  value={formData.quantityKg}
+                  onChange={(e) => setFormData({ ...formData, quantityKg: e.target.value })}
                   required
                 />
               </div>
@@ -452,7 +452,7 @@ export default function Products() {
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Current Stock:</span>
                 <span className="font-semibold text-foreground">
-                  {stockIntakeProduct?.currentStock} units
+                  {stockIntakeProduct?.currentStock.toFixed(2)} units
                 </span>
               </div>
             </div>

@@ -160,10 +160,10 @@ export default function Reports() {
                         : "text-foreground"
                     }`}
                   >
-                    {product.currentStock} units
+                    {product.currentStock.toFixed(2)} units
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Value: KSh {(product.currentStock * product.costPrice).toLocaleString()}
+                    Value: KSh {(product.currentStock * product.sellingPrice).toFixed(2)}
                   </p>
                 </div>
               </div>
