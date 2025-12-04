@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Download, Wifi, WifiOff } from "lucide-react";
+import { Download, Wifi, WifiOff, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface BeforeInstallPromptEvent extends Event {
@@ -11,6 +11,8 @@ export const PWAStatus = () => {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [isInstalled, setIsInstalled] = useState(false);
+  const [updateAvailable, setUpdateAvailable] = useState(false);
+  const [waitingWorker, setWaitingWorker] = useState<ServiceWorker | null>(null);
 
   useEffect(() => {
     // Check if already installed
@@ -41,6 +43,29 @@ export const PWAStatus = () => {
 
     window.addEventListener("appinstalled", handleAppInstalled);
 
+    // Check for service worker updates
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.ready.then((registration) => {
+        registration.addEventListener('updatefound', () => {
+          const newWorker = registration.installing;
+          if (newWorker) {
+            newWorker.addEventListener('statechange', () => {
+              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                setUpdateAvailable(true);
+                setWaitingWorker(newWorker);
+              }
+            });
+          }
+        });
+
+        // Check if there's already a waiting worker
+        if (registration.waiting) {
+          setUpdateAvailable(true);
+          setWaitingWorker(registration.waiting);
+        }
+      });
+    }
+
     return () => {
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
@@ -60,8 +85,27 @@ export const PWAStatus = () => {
     }
   };
 
+  const handleRefresh = () => {
+    if (waitingWorker) {
+      waitingWorker.postMessage({ type: 'SKIP_WAITING' });
+    }
+    window.location.reload();
+  };
+
   return (
     <div className="flex items-center gap-2">
+      {/* Refresh/Update button */}
+      <Button
+        onClick={handleRefresh}
+        size="sm"
+        variant="outline"
+        className={`text-xs gap-1.5 ${updateAvailable ? 'bg-amber-500/20 border-amber-500/50 text-amber-400' : ''}`}
+        title={updateAvailable ? "Update available - Click to refresh" : "Refresh app"}
+      >
+        <RefreshCw className={`h-3 w-3 ${updateAvailable ? 'animate-spin' : ''}`} />
+        {updateAvailable ? 'Update' : 'Refresh'}
+      </Button>
+
       {/* Offline indicator */}
       <div
         className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
