@@ -10,25 +10,10 @@ import Sales from "./pages/Sales";
 import Reports from "./pages/Reports";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
-import { useEffect } from "react";
 
 const queryClient = new QueryClient();
 
 const App = () => {
-  useEffect(() => {
-    // Register service worker for PWA functionality
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker
-        .register('/service-worker.js')
-        .then((registration) => {
-          console.log('Service Worker registered:', registration);
-        })
-        .catch((error) => {
-          console.log('Service Worker registration failed:', error);
-        });
-    }
-  }, []);
-
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
