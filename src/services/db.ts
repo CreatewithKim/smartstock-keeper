@@ -33,6 +33,13 @@ export interface Sale {
   notes?: string;
 }
 
+export interface ExcessSale {
+  id?: number;
+  amount: number;
+  date: Date;
+  notes?: string;
+}
+
 interface SmartStockDB extends DBSchema {
   products: {
     key: number;
@@ -49,6 +56,11 @@ interface SmartStockDB extends DBSchema {
     value: Sale;
     indexes: { 'by-product': number; 'by-date': Date };
   };
+  excessSales: {
+    key: number;
+    value: ExcessSale;
+    indexes: { 'by-date': Date };
+  };
 }
 
 let dbInstance: IDBPDatabase<SmartStockDB> | null = null;
@@ -56,30 +68,45 @@ let dbInstance: IDBPDatabase<SmartStockDB> | null = null;
 async function getDB() {
   if (dbInstance) return dbInstance;
 
-  dbInstance = await openDB<SmartStockDB>('smartstock-db', 1, {
-    upgrade(db) {
+  dbInstance = await openDB<SmartStockDB>('smartstock-db', 2, {
+    upgrade(db, oldVersion) {
       // Products store
-      const productStore = db.createObjectStore('products', {
-        keyPath: 'id',
-        autoIncrement: true,
-      });
-      productStore.createIndex('by-category', 'category');
+      if (!db.objectStoreNames.contains('products')) {
+        const productStore = db.createObjectStore('products', {
+          keyPath: 'id',
+          autoIncrement: true,
+        });
+        productStore.createIndex('by-category', 'category');
+      }
 
       // Stock intakes store
-      const intakeStore = db.createObjectStore('stockIntakes', {
-        keyPath: 'id',
-        autoIncrement: true,
-      });
-      intakeStore.createIndex('by-product', 'productId');
-      intakeStore.createIndex('by-date', 'date');
+      if (!db.objectStoreNames.contains('stockIntakes')) {
+        const intakeStore = db.createObjectStore('stockIntakes', {
+          keyPath: 'id',
+          autoIncrement: true,
+        });
+        intakeStore.createIndex('by-product', 'productId');
+        intakeStore.createIndex('by-date', 'date');
+      }
 
       // Sales store
-      const salesStore = db.createObjectStore('sales', {
-        keyPath: 'id',
-        autoIncrement: true,
-      });
-      salesStore.createIndex('by-product', 'productId');
-      salesStore.createIndex('by-date', 'date');
+      if (!db.objectStoreNames.contains('sales')) {
+        const salesStore = db.createObjectStore('sales', {
+          keyPath: 'id',
+          autoIncrement: true,
+        });
+        salesStore.createIndex('by-product', 'productId');
+        salesStore.createIndex('by-date', 'date');
+      }
+
+      // Excess sales store (added in version 2)
+      if (!db.objectStoreNames.contains('excessSales')) {
+        const excessSalesStore = db.createObjectStore('excessSales', {
+          keyPath: 'id',
+          autoIncrement: true,
+        });
+        excessSalesStore.createIndex('by-date', 'date');
+      }
     },
   });
 
@@ -216,6 +243,44 @@ export const salesDB = {
     
     const sales = await this.getByDateRange(startOfDay, endOfDay);
     return sales.reduce((sum, sale) => sum + sale.totalAmount, 0);
+  },
+};
+
+// Excess sales operations
+export const excessSalesDB = {
+  async getAll(): Promise<ExcessSale[]> {
+    const db = await getDB();
+    return db.getAll('excessSales');
+  },
+
+  async add(excessSale: Omit<ExcessSale, 'id'>): Promise<number> {
+    const db = await getDB();
+    return db.add('excessSales', excessSale as ExcessSale);
+  },
+
+  async getByDateRange(startDate: Date, endDate: Date): Promise<ExcessSale[]> {
+    const db = await getDB();
+    const excessSales = await db.getAll('excessSales');
+    return excessSales.filter(s => s.date >= startDate && s.date <= endDate);
+  },
+
+  async getTodayExcessSales(): Promise<ExcessSale[]> {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    
+    return this.getByDateRange(today, tomorrow);
+  },
+
+  async getDailyExcessTotal(date: Date = new Date()): Promise<number> {
+    const startOfDay = new Date(date);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(startOfDay);
+    endOfDay.setDate(endOfDay.getDate() + 1);
+    
+    const excessSales = await this.getByDateRange(startOfDay, endOfDay);
+    return excessSales.reduce((sum, sale) => sum + sale.amount, 0);
   },
 };
 

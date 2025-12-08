@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
-import { ShoppingCart, Calendar } from "lucide-react";
+import { ShoppingCart, Calendar, Plus } from "lucide-react";
 import { GlassCard } from "@/components/GlassCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { productDB, salesDB, Product, Sale } from "@/services/db";
+import { productDB, salesDB, excessSalesDB, Product, Sale, ExcessSale } from "@/services/db";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
@@ -21,12 +21,20 @@ export default function Sales() {
   const { toast } = useToast();
   const [products, setProducts] = useState<Product[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
+  const [excessSales, setExcessSales] = useState<ExcessSale[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isExcessDialogOpen, setIsExcessDialogOpen] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const [formData, setFormData] = useState({
     productId: "",
     totalAmount: "",
+    notes: "",
+  });
+
+  const [excessFormData, setExcessFormData] = useState({
+    amount: "",
+    date: format(new Date(), "yyyy-MM-dd"),
     notes: "",
   });
 
@@ -38,12 +46,14 @@ export default function Sales() {
 
   const loadData = async () => {
     try {
-      const [productsData, salesData] = await Promise.all([
+      const [productsData, salesData, excessSalesData] = await Promise.all([
         productDB.getAll(),
         salesDB.getAll(),
+        excessSalesDB.getAll(),
       ]);
       setProducts(productsData);
       setSales(salesData.sort((a, b) => b.date.getTime() - a.date.getTime()));
+      setExcessSales(excessSalesData.sort((a, b) => b.date.getTime() - a.date.getTime()));
     } catch (error) {
       console.error("Error loading data:", error);
       toast({
@@ -131,13 +141,64 @@ export default function Sales() {
     }
   };
 
+  const handleExcessSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    const amount = parseFloat(excessFormData.amount);
+    if (isNaN(amount) || amount <= 0) {
+      toast({
+        title: "Error",
+        description: "Please enter a valid amount",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const excessSaleData = {
+        amount,
+        date: new Date(excessFormData.date),
+        notes: excessFormData.notes,
+      };
+
+      await excessSalesDB.add(excessSaleData);
+
+      toast({
+        title: "Success",
+        description: "Excess sale recorded successfully",
+      });
+
+      setIsExcessDialogOpen(false);
+      setExcessFormData({
+        amount: "",
+        date: format(new Date(), "yyyy-MM-dd"),
+        notes: "",
+      });
+      loadData();
+    } catch (error: any) {
+      console.error("Error recording excess sale:", error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to record excess sale",
+        variant: "destructive",
+      });
+    }
+  };
+
   const todaySales = sales.filter((s) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     return s.date >= today;
   });
 
+  const todayExcessSales = excessSales.filter((s) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return s.date >= today;
+  });
+
   const todayTotal = todaySales.reduce((sum, sale) => sum + sale.totalAmount, 0);
+  const todayExcessTotal = todayExcessSales.reduce((sum, sale) => sum + sale.amount, 0);
 
   if (loading) {
     return (
@@ -157,27 +218,50 @@ export default function Sales() {
           <h1 className="text-4xl font-bold text-foreground mb-2">Sales</h1>
           <p className="text-muted-foreground">Record and track your daily sales</p>
         </div>
-        <Button onClick={() => setIsDialogOpen(true)} className="gap-2">
-          <ShoppingCart className="h-4 w-4" />
-          Record Sale
-        </Button>
+        <div className="flex gap-2">
+          <Button onClick={() => setIsExcessDialogOpen(true)} variant="outline" className="gap-2">
+            <Plus className="h-4 w-4" />
+            Record Excess
+          </Button>
+          <Button onClick={() => setIsDialogOpen(true)} className="gap-2">
+            <ShoppingCart className="h-4 w-4" />
+            Record Sale
+          </Button>
+        </div>
       </div>
 
       {/* Today's Summary */}
-      <GlassCard className="border-primary/20">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm text-muted-foreground mb-1">Today's Total Sales</p>
-            <p className="text-3xl font-bold text-primary">
-              KSh {todayTotal.toLocaleString()}
-            </p>
-            <p className="text-sm text-muted-foreground mt-1">
-              {todaySales.length} transaction{todaySales.length !== 1 ? "s" : ""}
-            </p>
+      <div className="grid gap-4 md:grid-cols-2">
+        <GlassCard className="border-primary/20">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-muted-foreground mb-1">Today's Product Sales</p>
+              <p className="text-3xl font-bold text-primary">
+                KSh {todayTotal.toLocaleString()}
+              </p>
+              <p className="text-sm text-muted-foreground mt-1">
+                {todaySales.length} transaction{todaySales.length !== 1 ? "s" : ""}
+              </p>
+            </div>
+            <ShoppingCart className="h-12 w-12 text-primary/30" />
           </div>
-          <Calendar className="h-12 w-12 text-primary/30" />
-        </div>
-      </GlassCard>
+        </GlassCard>
+
+        <GlassCard className="border-amber-500/20">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-muted-foreground mb-1">Today's Excess Sales</p>
+              <p className="text-3xl font-bold text-amber-500">
+                KSh {todayExcessTotal.toLocaleString()}
+              </p>
+              <p className="text-sm text-muted-foreground mt-1">
+                {todayExcessSales.length} record{todayExcessSales.length !== 1 ? "s" : ""}
+              </p>
+            </div>
+            <Plus className="h-12 w-12 text-amber-500/30" />
+          </div>
+        </GlassCard>
+      </div>
 
       {/* Sales History */}
       <GlassCard>
@@ -227,7 +311,46 @@ export default function Sales() {
         )}
       </GlassCard>
 
-      {/* Record Sale Dialog */}
+      {/* Excess Sales History */}
+      <GlassCard>
+        <h2 className="text-xl font-semibold text-foreground mb-4">Excess Sales</h2>
+        {excessSales.length > 0 ? (
+          <div className="space-y-3">
+            {excessSales.map((sale) => (
+              <div
+                key={sale.id}
+                className="flex items-center justify-between rounded-lg bg-amber-500/5 p-4"
+              >
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <p className="font-semibold text-foreground">Excess Sale</p>
+                    <span className="text-xs bg-amber-500/20 text-amber-500 px-2 py-0.5 rounded-full">
+                      Uncategorized
+                    </span>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    {format(sale.date, "MMM dd, yyyy")}
+                  </p>
+                  {sale.notes && (
+                    <p className="text-sm text-muted-foreground mt-1 italic">{sale.notes}</p>
+                  )}
+                </div>
+                <div className="text-right">
+                  <p className="text-lg font-bold text-amber-500">
+                    KSh {sale.amount.toLocaleString()}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-8">
+            <Plus className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+            <h3 className="text-lg font-semibold text-foreground mb-2">No excess sales</h3>
+            <p className="text-muted-foreground">Record uncategorized sales here</p>
+          </div>
+        )}
+      </GlassCard>
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="glass-strong max-w-md">
           <DialogHeader>
@@ -319,6 +442,72 @@ export default function Sales() {
               </Button>
               <Button type="submit" disabled={!selectedProduct || !formData.totalAmount}>
                 Record Sale
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Record Excess Sale Dialog */}
+      <Dialog open={isExcessDialogOpen} onOpenChange={setIsExcessDialogOpen}>
+        <DialogContent className="glass-strong max-w-md">
+          <DialogHeader>
+            <DialogTitle>Record Excess Sale</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleExcessSubmit} className="space-y-4">
+            <div>
+              <Label htmlFor="excessAmount">Amount (KSh)</Label>
+              <Input
+                id="excessAmount"
+                type="number"
+                step="0.01"
+                min="0.01"
+                placeholder="Enter excess sale amount"
+                value={excessFormData.amount}
+                onChange={(e) => setExcessFormData({ ...excessFormData, amount: e.target.value })}
+                required
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="excessDate">Date</Label>
+              <Input
+                id="excessDate"
+                type="date"
+                value={excessFormData.date}
+                onChange={(e) => setExcessFormData({ ...excessFormData, date: e.target.value })}
+                required
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="excessNotes">Notes (Optional)</Label>
+              <Textarea
+                id="excessNotes"
+                placeholder="Describe the excess sale..."
+                value={excessFormData.notes}
+                onChange={(e) => setExcessFormData({ ...excessFormData, notes: e.target.value })}
+                rows={3}
+              />
+            </div>
+
+            <div className="flex gap-2 justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setIsExcessDialogOpen(false);
+                  setExcessFormData({
+                    amount: "",
+                    date: format(new Date(), "yyyy-MM-dd"),
+                    notes: "",
+                  });
+                }}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={!excessFormData.amount}>
+                Record Excess
               </Button>
             </div>
           </form>
