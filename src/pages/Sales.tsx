@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ShoppingCart, Calendar, Plus } from "lucide-react";
+import { ShoppingCart, Calendar, Plus, Pencil, Trash2 } from "lucide-react";
 import { GlassCard } from "@/components/GlassCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,6 +24,7 @@ export default function Sales() {
   const [excessSales, setExcessSales] = useState<ExcessSale[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isExcessDialogOpen, setIsExcessDialogOpen] = useState(false);
+  const [editingExcess, setEditingExcess] = useState<ExcessSale | null>(null);
   const [loading, setLoading] = useState(true);
 
   const [formData, setFormData] = useState({
@@ -155,20 +156,32 @@ export default function Sales() {
     }
 
     try {
-      const excessSaleData = {
-        amount,
-        date: new Date(excessFormData.date),
-        notes: excessFormData.notes,
-      };
-
-      await excessSalesDB.add(excessSaleData);
-
-      toast({
-        title: "Success",
-        description: "Excess sale recorded successfully",
-      });
+      if (editingExcess) {
+        await excessSalesDB.update({
+          ...editingExcess,
+          amount,
+          date: new Date(excessFormData.date),
+          notes: excessFormData.notes,
+        });
+        toast({
+          title: "Success",
+          description: "Excess sale updated successfully",
+        });
+      } else {
+        const excessSaleData = {
+          amount,
+          date: new Date(excessFormData.date),
+          notes: excessFormData.notes,
+        };
+        await excessSalesDB.add(excessSaleData);
+        toast({
+          title: "Success",
+          description: "Excess sale recorded successfully",
+        });
+      }
 
       setIsExcessDialogOpen(false);
+      setEditingExcess(null);
       setExcessFormData({
         amount: "",
         date: format(new Date(), "yyyy-MM-dd"),
@@ -176,10 +189,38 @@ export default function Sales() {
       });
       loadData();
     } catch (error: any) {
-      console.error("Error recording excess sale:", error);
+      console.error("Error saving excess sale:", error);
       toast({
         title: "Error",
-        description: error.message || "Failed to record excess sale",
+        description: error.message || "Failed to save excess sale",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleEditExcess = (excessSale: ExcessSale) => {
+    setEditingExcess(excessSale);
+    setExcessFormData({
+      amount: excessSale.amount.toString(),
+      date: format(excessSale.date, "yyyy-MM-dd"),
+      notes: excessSale.notes || "",
+    });
+    setIsExcessDialogOpen(true);
+  };
+
+  const handleDeleteExcess = async (id: number) => {
+    try {
+      await excessSalesDB.delete(id);
+      toast({
+        title: "Success",
+        description: "Excess sale deleted successfully",
+      });
+      loadData();
+    } catch (error: any) {
+      console.error("Error deleting excess sale:", error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete excess sale",
         variant: "destructive",
       });
     }
@@ -335,10 +376,30 @@ export default function Sales() {
                     <p className="text-sm text-muted-foreground mt-1 italic">{sale.notes}</p>
                   )}
                 </div>
-                <div className="text-right">
-                  <p className="text-lg font-bold text-amber-500">
-                    KSh {sale.amount.toLocaleString()}
-                  </p>
+                <div className="flex items-center gap-3">
+                  <div className="text-right">
+                    <p className="text-lg font-bold text-amber-500">
+                      KSh {sale.amount.toLocaleString()}
+                    </p>
+                  </div>
+                  <div className="flex gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-muted-foreground hover:text-primary"
+                      onClick={() => handleEditExcess(sale)}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                      onClick={() => handleDeleteExcess(sale.id!)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
               </div>
             ))}
@@ -448,11 +509,21 @@ export default function Sales() {
         </DialogContent>
       </Dialog>
 
-      {/* Record Excess Sale Dialog */}
-      <Dialog open={isExcessDialogOpen} onOpenChange={setIsExcessDialogOpen}>
+      {/* Record/Edit Excess Sale Dialog */}
+      <Dialog open={isExcessDialogOpen} onOpenChange={(open) => {
+        setIsExcessDialogOpen(open);
+        if (!open) {
+          setEditingExcess(null);
+          setExcessFormData({
+            amount: "",
+            date: format(new Date(), "yyyy-MM-dd"),
+            notes: "",
+          });
+        }
+      }}>
         <DialogContent className="glass-strong max-w-md">
           <DialogHeader>
-            <DialogTitle>Record Excess Sale</DialogTitle>
+            <DialogTitle>{editingExcess ? "Edit Excess Sale" : "Record Excess Sale"}</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleExcessSubmit} className="space-y-4">
             <div>
@@ -497,6 +568,7 @@ export default function Sales() {
                 variant="outline"
                 onClick={() => {
                   setIsExcessDialogOpen(false);
+                  setEditingExcess(null);
                   setExcessFormData({
                     amount: "",
                     date: format(new Date(), "yyyy-MM-dd"),
@@ -507,7 +579,7 @@ export default function Sales() {
                 Cancel
               </Button>
               <Button type="submit" disabled={!excessFormData.amount}>
-                Record Excess
+                {editingExcess ? "Update" : "Record Excess"}
               </Button>
             </div>
           </form>

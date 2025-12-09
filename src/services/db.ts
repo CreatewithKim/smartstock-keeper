@@ -253,9 +253,24 @@ export const excessSalesDB = {
     return db.getAll('excessSales');
   },
 
+  async getById(id: number): Promise<ExcessSale | undefined> {
+    const db = await getDB();
+    return db.get('excessSales', id);
+  },
+
   async add(excessSale: Omit<ExcessSale, 'id'>): Promise<number> {
     const db = await getDB();
     return db.add('excessSales', excessSale as ExcessSale);
+  },
+
+  async update(excessSale: ExcessSale): Promise<void> {
+    const db = await getDB();
+    await db.put('excessSales', excessSale);
+  },
+
+  async delete(id: number): Promise<void> {
+    const db = await getDB();
+    await db.delete('excessSales', id);
   },
 
   async getByDateRange(startDate: Date, endDate: Date): Promise<ExcessSale[]> {
