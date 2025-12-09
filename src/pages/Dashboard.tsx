@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Package, TrendingDown, DollarSign, AlertTriangle, ShoppingCart, FileText } from "lucide-react";
 import { StatCard } from "@/components/StatCard";
 import { GlassCard } from "@/components/GlassCard";
-import { productDB, salesDB, Product, Sale } from "@/services/db";
+import { productDB, salesDB, excessSalesDB, Product, Sale, ExcessSale } from "@/services/db";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
@@ -13,6 +13,7 @@ export default function Dashboard() {
   const [lowStockProducts, setLowStockProducts] = useState<Product[]>([]);
   const [todaySales, setTodaySales] = useState<Sale[]>([]);
   const [todayTotal, setTodayTotal] = useState(0);
+  const [totalExcessSales, setTotalExcessSales] = useState(0);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -21,17 +22,21 @@ export default function Dashboard() {
 
   const loadDashboardData = async () => {
     try {
-      const [allProducts, lowStock, sales, total] = await Promise.all([
+      const [allProducts, lowStock, sales, total, allExcessSales] = await Promise.all([
         productDB.getAll(),
         productDB.getLowStockProducts(),
         salesDB.getTodaySales(),
         salesDB.getDailySalesTotal(),
+        excessSalesDB.getAll(),
       ]);
+
+      const excessTotal = allExcessSales.reduce((sum, e) => sum + e.amount, 0);
 
       setProducts(allProducts);
       setLowStockProducts(lowStock);
       setTodaySales(sales);
       setTodayTotal(total);
+      setTotalExcessSales(excessTotal);
     } catch (error) {
       console.error("Error loading dashboard:", error);
     } finally {
@@ -39,10 +44,11 @@ export default function Dashboard() {
     }
   };
 
-  const totalStockValue = products.reduce(
+  const productStockValue = products.reduce(
     (sum, p) => sum + p.currentStock * p.sellingPrice,
     0
   );
+  const totalStockValue = productStockValue - totalExcessSales;
 
   if (loading) {
     return (
