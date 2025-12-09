@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { FileDown, Calendar, TrendingUp } from "lucide-react";
 import { GlassCard } from "@/components/GlassCard";
 import { Button } from "@/components/ui/button";
-import { productDB, salesDB, stockIntakeDB, dataUtils, Product, Sale, StockIntake } from "@/services/db";
+import { productDB, salesDB, stockIntakeDB, excessSalesDB, dataUtils, Product, Sale, StockIntake, ExcessSale } from "@/services/db";
 import { format, startOfWeek, startOfMonth, endOfWeek, endOfMonth } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 
@@ -11,6 +11,7 @@ export default function Reports() {
   const [products, setProducts] = useState<Product[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
   const [intakes, setIntakes] = useState<StockIntake[]>([]);
+  const [excessSales, setExcessSales] = useState<ExcessSale[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -19,14 +20,16 @@ export default function Reports() {
 
   const loadData = async () => {
     try {
-      const [productsData, salesData, intakesData] = await Promise.all([
+      const [productsData, salesData, intakesData, excessData] = await Promise.all([
         productDB.getAll(),
         salesDB.getAll(),
         stockIntakeDB.getAll(),
+        excessSalesDB.getAll(),
       ]);
       setProducts(productsData);
       setSales(salesData);
       setIntakes(intakesData);
+      setExcessSales(excessData);
     } catch (error) {
       console.error("Error loading data:", error);
       toast({
@@ -51,10 +54,34 @@ export default function Reports() {
     return sales.filter((s) => s.date >= monthStart && s.date <= monthEnd);
   };
 
+  const getWeekExcessSales = () => {
+    const weekStart = startOfWeek(new Date(), { weekStartsOn: 1 });
+    const weekEnd = endOfWeek(new Date(), { weekStartsOn: 1 });
+    return excessSales.filter((e) => e.date >= weekStart && e.date <= weekEnd);
+  };
+
+  const getMonthExcessSales = () => {
+    const monthStart = startOfMonth(new Date());
+    const monthEnd = endOfMonth(new Date());
+    return excessSales.filter((e) => e.date >= monthStart && e.date <= monthEnd);
+  };
+
   const weekSales = getWeekSales();
   const monthSales = getMonthSales();
-  const weekTotal = weekSales.reduce((sum, s) => sum + s.totalAmount, 0);
-  const monthTotal = monthSales.reduce((sum, s) => sum + s.totalAmount, 0);
+  const weekExcess = getWeekExcessSales();
+  const monthExcess = getMonthExcessSales();
+  
+  const weekProductTotal = weekSales.reduce((sum, s) => sum + s.totalAmount, 0);
+  const monthProductTotal = monthSales.reduce((sum, s) => sum + s.totalAmount, 0);
+  const weekExcessTotal = weekExcess.reduce((sum, e) => sum + e.amount, 0);
+  const monthExcessTotal = monthExcess.reduce((sum, e) => sum + e.amount, 0);
+  
+  const weekTotal = weekProductTotal + weekExcessTotal;
+  const monthTotal = monthProductTotal + monthExcessTotal;
+
+  const totalExcessSales = excessSales.reduce((sum, e) => sum + e.amount, 0);
+  const productStockValue = products.reduce((sum, p) => sum + p.currentStock * p.sellingPrice, 0);
+  const totalStockValue = productStockValue - totalExcessSales;
 
   const lowStockProducts = products.filter((p) => p.currentStock <= p.lowStockThreshold);
 
@@ -106,7 +133,9 @@ export default function Reports() {
             <p className="text-2xl font-bold text-foreground">
               KSh {weekTotal.toLocaleString()}
             </p>
-            <p className="text-xs text-muted-foreground">{weekSales.length} transactions</p>
+            <p className="text-xs text-muted-foreground">
+              {weekSales.length} product sales + {weekExcess.length} excess
+            </p>
           </div>
         </GlassCard>
 
@@ -119,15 +148,24 @@ export default function Reports() {
             <p className="text-2xl font-bold text-foreground">
               KSh {monthTotal.toLocaleString()}
             </p>
-            <p className="text-xs text-muted-foreground">{monthSales.length} transactions</p>
+            <p className="text-xs text-muted-foreground">
+              {monthSales.length} product sales + {monthExcess.length} excess
+            </p>
           </div>
         </GlassCard>
 
         <GlassCard>
           <div className="space-y-2">
-            <p className="text-sm text-muted-foreground">Total Products</p>
-            <p className="text-2xl font-bold text-foreground">{products.length}</p>
-            <p className="text-xs text-destructive">{lowStockProducts.length} low stock</p>
+            <p className="text-sm text-muted-foreground">Net Stock Value</p>
+            <p className="text-2xl font-bold text-foreground">
+              KSh {totalStockValue.toFixed(2)}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Product value: KSh {productStockValue.toFixed(2)}
+            </p>
+            <p className="text-xs text-destructive">
+              Excess deducted: KSh {totalExcessSales.toFixed(2)}
+            </p>
           </div>
         </GlassCard>
       </div>
