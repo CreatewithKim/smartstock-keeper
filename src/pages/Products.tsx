@@ -43,7 +43,13 @@ export default function Products() {
   const [stockIntakeData, setStockIntakeData] = useState({
     quantity: "",
     notes: "",
+    vendorName: "",
+    isPaid: false,
   });
+
+  const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
+  const [passwordInput, setPasswordInput] = useState("");
+  const ADD_PRODUCT_PASSWORD = "admin123";
 
   useEffect(() => {
     loadProducts();
@@ -79,8 +85,23 @@ export default function Products() {
   };
 
   const handleOpenAddDialog = () => {
-    resetForm();
-    setIsAddDialogOpen(true);
+    setPasswordInput("");
+    setIsPasswordDialogOpen(true);
+  };
+
+  const handlePasswordSubmit = () => {
+    if (passwordInput === ADD_PRODUCT_PASSWORD) {
+      setIsPasswordDialogOpen(false);
+      setPasswordInput("");
+      resetForm();
+      setIsAddDialogOpen(true);
+    } else {
+      toast({
+        title: "Access Denied",
+        description: "Incorrect password",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleOpenEditDialog = (product: Product) => {
@@ -163,7 +184,7 @@ export default function Products() {
 
   const handleOpenStockIntake = (product: Product) => {
     setStockIntakeProduct(product);
-    setStockIntakeData({ quantity: "", notes: "" });
+    setStockIntakeData({ quantity: "", notes: "", vendorName: "", isPaid: false });
     setIsStockIntakeDialogOpen(true);
   };
 
@@ -180,6 +201,8 @@ export default function Products() {
         quantity,
         date: new Date(),
         notes: stockIntakeData.notes,
+        vendorName: stockIntakeData.vendorName,
+        isPaid: stockIntakeData.isPaid,
       });
 
       toast({
@@ -189,7 +212,7 @@ export default function Products() {
 
       setIsStockIntakeDialogOpen(false);
       setStockIntakeProduct(null);
-      setStockIntakeData({ quantity: "", notes: "" });
+      setStockIntakeData({ quantity: "", notes: "", vendorName: "", isPaid: false });
       loadProducts();
     } catch (error) {
       console.error("Error adding stock:", error);
@@ -391,6 +414,8 @@ export default function Products() {
                   value={formData.currentStock}
                   onChange={(e) => setFormData({ ...formData, currentStock: e.target.value })}
                   required
+                  disabled={!!editingProduct}
+                  className={editingProduct ? "bg-muted cursor-not-allowed" : ""}
                 />
               </div>
             </div>
@@ -441,6 +466,44 @@ export default function Products() {
         </AlertDialogContent>
       </AlertDialog>
 
+      {/* Password Dialog for Add Product */}
+      <Dialog open={isPasswordDialogOpen} onOpenChange={setIsPasswordDialogOpen}>
+        <DialogContent className="glass-strong max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Enter Password</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="password">Password</Label>
+              <Input
+                id="password"
+                type="password"
+                value={passwordInput}
+                onChange={(e) => setPasswordInput(e.target.value)}
+                placeholder="Enter password to add products"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handlePasswordSubmit();
+                }}
+              />
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setIsPasswordDialogOpen(false);
+                  setPasswordInput("");
+                }}
+              >
+                Cancel
+              </Button>
+              <Button onClick={handlePasswordSubmit}>
+                Continue
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Stock Intake Dialog */}
       <Dialog open={isStockIntakeDialogOpen} onOpenChange={setIsStockIntakeDialogOpen}>
         <DialogContent className="glass-strong max-w-md">
@@ -480,10 +543,31 @@ export default function Products() {
             )}
 
             <div>
+              <Label htmlFor="vendorName">Vendor Name</Label>
+              <Input
+                id="vendorName"
+                placeholder="Enter vendor name..."
+                value={stockIntakeData.vendorName}
+                onChange={(e) => setStockIntakeData({ ...stockIntakeData, vendorName: e.target.value })}
+              />
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                id="isPaid"
+                checked={stockIntakeData.isPaid}
+                onChange={(e) => setStockIntakeData({ ...stockIntakeData, isPaid: e.target.checked })}
+                className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
+              />
+              <Label htmlFor="isPaid" className="cursor-pointer">Vendor has been paid</Label>
+            </div>
+
+            <div>
               <Label htmlFor="intakeNotes">Notes (Optional)</Label>
               <Textarea
                 id="intakeNotes"
-                placeholder="Supplier, batch number, etc..."
+                placeholder="Batch number, etc..."
                 value={stockIntakeData.notes}
                 onChange={(e) => setStockIntakeData({ ...stockIntakeData, notes: e.target.value })}
                 rows={3}
@@ -497,7 +581,7 @@ export default function Products() {
                 onClick={() => {
                   setIsStockIntakeDialogOpen(false);
                   setStockIntakeProduct(null);
-                  setStockIntakeData({ quantity: "", notes: "" });
+                  setStockIntakeData({ quantity: "", notes: "", vendorName: "", isPaid: false });
                 }}
               >
                 Cancel

@@ -20,6 +20,8 @@ export interface StockIntake {
   quantity: number;
   date: Date;
   notes?: string;
+  vendorName?: string;
+  isPaid: boolean;
 }
 
 export interface Sale {
