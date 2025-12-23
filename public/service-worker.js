@@ -46,6 +46,18 @@ self.addEventListener('fetch', (event) => {
   // Skip chrome-extension and other non-http requests
   if (!url.protocol.startsWith('http')) return;
 
+  // IMPORTANT: Never cache Vite dev server modules/routes.
+  // Caching these can lead to mixed module graphs and React hook dispatcher errors.
+  if (
+    url.pathname.startsWith('/@vite') ||
+    url.pathname.startsWith('/@react-refresh') ||
+    url.pathname.startsWith('/src/') ||
+    url.pathname.startsWith('/node_modules/')
+  ) {
+    event.respondWith(fetch(request));
+    return;
+  }
+
   // For navigation requests (HTML pages), use Network First with offline fallback
   if (request.mode === 'navigate') {
     event.respondWith(
