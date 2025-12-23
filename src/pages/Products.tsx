@@ -109,11 +109,11 @@ export default function Products() {
     setFormData({
       name: product.name,
       category: product.category,
-      quantityKg: product.quantityKg.toFixed(2),
-      sellingPrice: product.sellingPrice.toFixed(2),
-      currentStock: product.currentStock.toFixed(2),
-      initialStock: product.initialStock.toFixed(2),
-      lowStockThreshold: product.lowStockThreshold.toFixed(2),
+      quantityKg: (product.quantityKg ?? 0).toFixed(2),
+      sellingPrice: (product.sellingPrice ?? 0).toFixed(2),
+      currentStock: (product.currentStock ?? 0).toFixed(2),
+      initialStock: (product.initialStock ?? product.currentStock ?? 0).toFixed(2),
+      lowStockThreshold: (product.lowStockThreshold ?? 0).toFixed(2),
     });
     setIsAddDialogOpen(true);
   };
