@@ -1,5 +1,5 @@
-const CACHE_NAME = 'smartstock-v3';
-const DYNAMIC_CACHE = 'smartstock-dynamic-v2';
+const CACHE_NAME = 'smartstock-v4';
+const DYNAMIC_CACHE = 'smartstock-dynamic-v3';
 
 // Install service worker - cache shell immediately
 self.addEventListener('install', (event) => {
