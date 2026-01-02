@@ -47,9 +47,6 @@ export default function Products() {
     isPaid: false,
   });
 
-  const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
-  const [passwordInput, setPasswordInput] = useState("");
-  const ADD_PRODUCT_PASSWORD = "admin123";
 
   useEffect(() => {
     loadProducts();
@@ -85,23 +82,8 @@ export default function Products() {
   };
 
   const handleOpenAddDialog = () => {
-    setPasswordInput("");
-    setIsPasswordDialogOpen(true);
-  };
-
-  const handlePasswordSubmit = () => {
-    if (passwordInput === ADD_PRODUCT_PASSWORD) {
-      setIsPasswordDialogOpen(false);
-      setPasswordInput("");
-      resetForm();
-      setIsAddDialogOpen(true);
-    } else {
-      toast({
-        title: "Access Denied",
-        description: "Incorrect password",
-        variant: "destructive",
-      });
-    }
+    resetForm();
+    setIsAddDialogOpen(true);
   };
 
   const handleOpenEditDialog = (product: Product) => {
@@ -466,43 +448,6 @@ export default function Products() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Password Dialog for Add Product */}
-      <Dialog open={isPasswordDialogOpen} onOpenChange={setIsPasswordDialogOpen}>
-        <DialogContent className="glass-strong max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Enter Password</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                value={passwordInput}
-                onChange={(e) => setPasswordInput(e.target.value)}
-                placeholder="Enter password to add products"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") handlePasswordSubmit();
-                }}
-              />
-            </div>
-            <div className="flex gap-2 justify-end">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setIsPasswordDialogOpen(false);
-                  setPasswordInput("");
-                }}
-              >
-                Cancel
-              </Button>
-              <Button onClick={handlePasswordSubmit}>
-                Continue
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
 
       {/* Stock Intake Dialog */}
       <Dialog open={isStockIntakeDialogOpen} onOpenChange={setIsStockIntakeDialogOpen}>
