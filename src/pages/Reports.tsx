@@ -1,10 +1,19 @@
 import { useEffect, useState } from "react";
-import { FileDown, Calendar, TrendingUp } from "lucide-react";
+import { FileDown, Calendar, TrendingUp, Smartphone, Wallet, Banknote } from "lucide-react";
 import { GlassCard } from "@/components/GlassCard";
 import { Button } from "@/components/ui/button";
 import { productDB, salesDB, stockIntakeDB, excessSalesDB, dataUtils, Product, Sale, StockIntake, ExcessSale } from "@/services/db";
 import { format, startOfWeek, startOfMonth, endOfWeek, endOfMonth } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
+
+interface AvenueRecord {
+  mpesa: number;
+  pochiLaBiashara: number;
+  cash: number;
+  date: string;
+}
+
+const AVENUES_STORAGE_KEY = "smartstock-avenues";
 
 export default function Reports() {
   const { toast } = useToast();
@@ -12,6 +21,7 @@ export default function Reports() {
   const [sales, setSales] = useState<Sale[]>([]);
   const [intakes, setIntakes] = useState<StockIntake[]>([]);
   const [excessSales, setExcessSales] = useState<ExcessSale[]>([]);
+  const [avenueRecords, setAvenueRecords] = useState<AvenueRecord[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -30,6 +40,12 @@ export default function Reports() {
       setSales(salesData);
       setIntakes(intakesData);
       setExcessSales(excessData);
+
+      // Load avenue records from localStorage
+      const storedRecords = localStorage.getItem(AVENUES_STORAGE_KEY);
+      if (storedRecords) {
+        setAvenueRecords(JSON.parse(storedRecords));
+      }
     } catch (error) {
       console.error("Error loading data:", error);
       toast({
@@ -66,10 +82,30 @@ export default function Reports() {
     return excessSales.filter((e) => e.date >= monthStart && e.date <= monthEnd);
   };
 
+  const getWeekAvenues = () => {
+    const weekStart = startOfWeek(new Date(), { weekStartsOn: 1 });
+    const weekEnd = endOfWeek(new Date(), { weekStartsOn: 1 });
+    return avenueRecords.filter((r) => {
+      const recordDate = new Date(r.date);
+      return recordDate >= weekStart && recordDate <= weekEnd;
+    });
+  };
+
+  const getMonthAvenues = () => {
+    const monthStart = startOfMonth(new Date());
+    const monthEnd = endOfMonth(new Date());
+    return avenueRecords.filter((r) => {
+      const recordDate = new Date(r.date);
+      return recordDate >= monthStart && recordDate <= monthEnd;
+    });
+  };
+
   const weekSales = getWeekSales();
   const monthSales = getMonthSales();
   const weekExcess = getWeekExcessSales();
   const monthExcess = getMonthExcessSales();
+  const weekAvenues = getWeekAvenues();
+  const monthAvenues = getMonthAvenues();
   
   const weekProductTotal = weekSales.reduce((sum, s) => sum + s.totalAmount, 0);
   const monthProductTotal = monthSales.reduce((sum, s) => sum + s.totalAmount, 0);
@@ -78,6 +114,20 @@ export default function Reports() {
   
   const weekTotal = weekProductTotal + weekExcessTotal;
   const monthTotal = monthProductTotal + monthExcessTotal;
+
+  // Avenue totals
+  const weekMpesa = weekAvenues.reduce((sum, r) => sum + r.mpesa, 0);
+  const weekPochi = weekAvenues.reduce((sum, r) => sum + r.pochiLaBiashara, 0);
+  const weekCash = weekAvenues.reduce((sum, r) => sum + r.cash, 0);
+  
+  const monthMpesa = monthAvenues.reduce((sum, r) => sum + r.mpesa, 0);
+  const monthPochi = monthAvenues.reduce((sum, r) => sum + r.pochiLaBiashara, 0);
+  const monthCash = monthAvenues.reduce((sum, r) => sum + r.cash, 0);
+
+  const allTimeMpesa = avenueRecords.reduce((sum, r) => sum + r.mpesa, 0);
+  const allTimePochi = avenueRecords.reduce((sum, r) => sum + r.pochiLaBiashara, 0);
+  const allTimeCash = avenueRecords.reduce((sum, r) => sum + r.cash, 0);
+  const allTimeTotal = allTimeMpesa + allTimePochi + allTimeCash;
 
   const totalExcessSales = excessSales.reduce((sum, e) => sum + e.amount, 0);
   const productStockValue = products.reduce((sum, p) => sum + p.currentStock * p.sellingPrice, 0);
@@ -169,6 +219,119 @@ export default function Reports() {
           </div>
         </GlassCard>
       </div>
+
+      {/* Payment Avenues Breakdown */}
+      <GlassCard>
+        <h2 className="text-xl font-semibold text-foreground mb-4">Payment Avenues Breakdown</h2>
+        
+        <div className="grid gap-4 md:grid-cols-3 mb-6">
+          {/* This Week */}
+          <div className="space-y-3 p-4 rounded-lg bg-primary/5">
+            <h3 className="text-sm font-medium text-muted-foreground">This Week</h3>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Smartphone className="h-4 w-4 text-primary" />
+                  <span className="text-sm">M-Pesa</span>
+                </div>
+                <span className="font-medium">KSh {weekMpesa.toFixed(2)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Wallet className="h-4 w-4 text-green-500" />
+                  <span className="text-sm">Pochi la Biashara</span>
+                </div>
+                <span className="font-medium">KSh {weekPochi.toFixed(2)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Banknote className="h-4 w-4 text-yellow-500" />
+                  <span className="text-sm">Cash</span>
+                </div>
+                <span className="font-medium">KSh {weekCash.toFixed(2)}</span>
+              </div>
+              <div className="border-t border-border pt-2 mt-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">Total</span>
+                  <span className="font-bold text-primary">KSh {(weekMpesa + weekPochi + weekCash).toFixed(2)}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* This Month */}
+          <div className="space-y-3 p-4 rounded-lg bg-primary/5">
+            <h3 className="text-sm font-medium text-muted-foreground">This Month</h3>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Smartphone className="h-4 w-4 text-primary" />
+                  <span className="text-sm">M-Pesa</span>
+                </div>
+                <span className="font-medium">KSh {monthMpesa.toFixed(2)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Wallet className="h-4 w-4 text-green-500" />
+                  <span className="text-sm">Pochi la Biashara</span>
+                </div>
+                <span className="font-medium">KSh {monthPochi.toFixed(2)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Banknote className="h-4 w-4 text-yellow-500" />
+                  <span className="text-sm">Cash</span>
+                </div>
+                <span className="font-medium">KSh {monthCash.toFixed(2)}</span>
+              </div>
+              <div className="border-t border-border pt-2 mt-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">Total</span>
+                  <span className="font-bold text-primary">KSh {(monthMpesa + monthPochi + monthCash).toFixed(2)}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* All Time */}
+          <div className="space-y-3 p-4 rounded-lg bg-primary/5">
+            <h3 className="text-sm font-medium text-muted-foreground">All Time</h3>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Smartphone className="h-4 w-4 text-primary" />
+                  <span className="text-sm">M-Pesa</span>
+                </div>
+                <span className="font-medium">KSh {allTimeMpesa.toFixed(2)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Wallet className="h-4 w-4 text-green-500" />
+                  <span className="text-sm">Pochi la Biashara</span>
+                </div>
+                <span className="font-medium">KSh {allTimePochi.toFixed(2)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Banknote className="h-4 w-4 text-yellow-500" />
+                  <span className="text-sm">Cash</span>
+                </div>
+                <span className="font-medium">KSh {allTimeCash.toFixed(2)}</span>
+              </div>
+              <div className="border-t border-border pt-2 mt-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">Total</span>
+                  <span className="font-bold text-primary">KSh {allTimeTotal.toFixed(2)}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {avenueRecords.length === 0 && (
+          <p className="text-center text-muted-foreground py-4">No avenue records yet. Go to Avenues to record payments.</p>
+        )}
+      </GlassCard>
 
       {/* Current Stock Levels */}
       <GlassCard>
