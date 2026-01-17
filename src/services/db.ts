@@ -42,6 +42,16 @@ export interface ExcessSale {
   notes?: string;
 }
 
+export interface ProductOut {
+  id?: number;
+  productId: number;
+  productName: string;
+  quantity: number;
+  destination: string;
+  date: Date;
+  notes?: string;
+}
+
 interface SmartStockDB extends DBSchema {
   products: {
     key: number;
@@ -63,6 +73,11 @@ interface SmartStockDB extends DBSchema {
     value: ExcessSale;
     indexes: { 'by-date': Date };
   };
+  productsOut: {
+    key: number;
+    value: ProductOut;
+    indexes: { 'by-product': number; 'by-date': Date; 'by-destination': string };
+  };
 }
 
 let dbInstance: IDBPDatabase<SmartStockDB> | null = null;
@@ -70,7 +85,7 @@ let dbInstance: IDBPDatabase<SmartStockDB> | null = null;
 async function getDB() {
   if (dbInstance) return dbInstance;
 
-  dbInstance = await openDB<SmartStockDB>('smartstock-db', 2, {
+  dbInstance = await openDB<SmartStockDB>('smartstock-db', 3, {
     upgrade(db, oldVersion) {
       // Products store
       if (!db.objectStoreNames.contains('products')) {
@@ -108,6 +123,17 @@ async function getDB() {
           autoIncrement: true,
         });
         excessSalesStore.createIndex('by-date', 'date');
+      }
+
+      // Products out store (added in version 3)
+      if (!db.objectStoreNames.contains('productsOut')) {
+        const productsOutStore = db.createObjectStore('productsOut', {
+          keyPath: 'id',
+          autoIncrement: true,
+        });
+        productsOutStore.createIndex('by-product', 'productId');
+        productsOutStore.createIndex('by-date', 'date');
+        productsOutStore.createIndex('by-destination', 'destination');
       }
     },
   });
@@ -298,6 +324,74 @@ export const excessSalesDB = {
     
     const excessSales = await this.getByDateRange(startOfDay, endOfDay);
     return excessSales.reduce((sum, sale) => sum + sale.amount, 0);
+  },
+};
+
+// Products out operations
+export const productOutDB = {
+  async getAll(): Promise<ProductOut[]> {
+    const db = await getDB();
+    return db.getAll('productsOut');
+  },
+
+  async getById(id: number): Promise<ProductOut | undefined> {
+    const db = await getDB();
+    return db.get('productsOut', id);
+  },
+
+  async getByProduct(productId: number): Promise<ProductOut[]> {
+    const db = await getDB();
+    return db.getAllFromIndex('productsOut', 'by-product', productId);
+  },
+
+  async add(productOut: Omit<ProductOut, 'id'>): Promise<number> {
+    const db = await getDB();
+    const product = await productDB.getById(productOut.productId);
+    
+    if (!product) {
+      throw new Error('Product not found');
+    }
+
+    if (product.currentStock < productOut.quantity) {
+      throw new Error(`Insufficient stock. Available: ${product.currentStock.toFixed(2)}, Requested: ${productOut.quantity}`);
+    }
+
+    const id = await db.add('productsOut', productOut as ProductOut);
+    
+    // Update product stock
+    await productDB.updateStock(productOut.productId, productOut.quantity, false);
+    
+    return id;
+  },
+
+  async update(productOut: ProductOut): Promise<void> {
+    const db = await getDB();
+    await db.put('productsOut', productOut);
+  },
+
+  async delete(id: number): Promise<void> {
+    const db = await getDB();
+    await db.delete('productsOut', id);
+  },
+
+  async getByDateRange(startDate: Date, endDate: Date): Promise<ProductOut[]> {
+    const db = await getDB();
+    const productsOut = await db.getAll('productsOut');
+    return productsOut.filter(p => p.date >= startDate && p.date <= endDate);
+  },
+
+  async getByDestination(destination: string): Promise<ProductOut[]> {
+    const db = await getDB();
+    return db.getAllFromIndex('productsOut', 'by-destination', destination);
+  },
+
+  async getTodayProductsOut(): Promise<ProductOut[]> {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    
+    return this.getByDateRange(today, tomorrow);
   },
 };
 
