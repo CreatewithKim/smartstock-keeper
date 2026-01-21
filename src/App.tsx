@@ -11,6 +11,7 @@ import Sales from "./pages/Sales";
 import Avenues from "./pages/Avenues";
 import Reports from "./pages/Reports";
 import Settings from "./pages/Settings";
+import ScaleIntegration from "./pages/ScaleIntegration";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -31,6 +32,7 @@ const App = () => {
               <Route path="/avenues" element={<Avenues />} />
               <Route path="/reports" element={<Reports />} />
               <Route path="/settings" element={<Settings />} />
+              <Route path="/scale" element={<ScaleIntegration />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>
