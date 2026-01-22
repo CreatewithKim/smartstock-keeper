@@ -1,0 +1,5 @@
+# ACLAS PS6X Scale Middleware Dependencies
+# Python 3.10+
+
+pyserial>=3.5
+websockets>=12.0
