@@ -40,13 +40,11 @@ const defaultConfig: ScaleConfig = {
 const ScaleIntegration = () => {
   const [isConnected, setIsConnected] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
-  const [isDemoMode, setIsDemoMode] = useState(true);
   const [config, setConfig] = useState<ScaleConfig>(defaultConfig);
   const [readings, setReadings] = useState<ScaleReading[]>([]);
   const [currentReading, setCurrentReading] = useState<ScaleReading | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
-  const demoIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     loadProducts();
@@ -86,12 +84,6 @@ const ScaleIntegration = () => {
   };
 
   const connectToMiddleware = useCallback(() => {
-    if (isDemoMode) {
-      setIsConnected(true);
-      toast({ title: 'Demo Mode Active', description: 'Simulated scale readings will be generated' });
-      return;
-    }
-
     try {
       wsRef.current = new WebSocket(config.middlewareUrl);
       
@@ -120,14 +112,11 @@ const ScaleIntegration = () => {
     } catch (e) {
       toast({ title: 'Error', description: 'Failed to initialize WebSocket', variant: 'destructive' });
     }
-  }, [config.middlewareUrl, isDemoMode]);
+  }, [config.middlewareUrl]);
 
   const disconnect = () => {
     if (wsRef.current) {
       wsRef.current.close();
-    }
-    if (demoIntervalRef.current) {
-      clearInterval(demoIntervalRef.current);
     }
     setIsConnected(false);
     setIsRunning(false);
@@ -181,31 +170,13 @@ const ScaleIntegration = () => {
 
   const startReading = () => {
     setIsRunning(true);
-    
-    if (isDemoMode) {
-      // Generate demo readings every 3 seconds
-      demoIntervalRef.current = setInterval(() => {
-        if (products.length === 0) return;
-        
-        const randomProduct = products[Math.floor(Math.random() * products.length)];
-        const randomWeight = Number((Math.random() * 5 + 0.5).toFixed(2));
-        
-        processScaleData({
-          plu: randomProduct.id?.toString() || randomProduct.name,
-          weight: randomWeight
-        });
-      }, 3000);
-    } else if (wsRef.current) {
+    if (wsRef.current) {
       wsRef.current.send(JSON.stringify({ command: 'start', config }));
     }
   };
 
   const stopReading = () => {
     setIsRunning(false);
-    if (demoIntervalRef.current) {
-      clearInterval(demoIntervalRef.current);
-      demoIntervalRef.current = null;
-    }
     if (wsRef.current) {
       wsRef.current.send(JSON.stringify({ command: 'stop' }));
     }
@@ -241,19 +212,10 @@ const ScaleIntegration = () => {
         {/* Connection Controls */}
         <GlassCard className="p-4">
           <div className="flex flex-wrap items-center gap-4">
-            <div className="flex items-center gap-2">
-              <Switch
-                checked={isDemoMode}
-                onCheckedChange={setIsDemoMode}
-                disabled={isConnected}
-              />
-              <Label>Demo Mode</Label>
-            </div>
-
             {!isConnected ? (
               <Button onClick={connectToMiddleware} className="gap-2">
                 <Wifi className="h-4 w-4" />
-                {isDemoMode ? 'Activate Demo' : 'Connect Middleware'}
+                Connect Middleware
               </Button>
             ) : (
               <>
@@ -283,81 +245,79 @@ const ScaleIntegration = () => {
         </GlassCard>
 
         {/* Configuration */}
-        {!isDemoMode && (
-          <GlassCard className="p-4">
-            <h3 className="font-semibold mb-4">Serial Port Configuration</h3>
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-              <div className="space-y-2">
-                <Label>COM Port</Label>
-                <Input
-                  value={config.port}
-                  onChange={(e) => saveConfig({ ...config, port: e.target.value })}
-                  placeholder="COM3"
-                  disabled={isConnected}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Baud Rate</Label>
-                <Select
-                  value={config.baudRate.toString()}
-                  onValueChange={(v) => saveConfig({ ...config, baudRate: parseInt(v) })}
-                  disabled={isConnected}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {[4800, 9600, 19200, 38400, 57600, 115200].map(rate => (
-                      <SelectItem key={rate} value={rate.toString()}>{rate}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Parity</Label>
-                <Select
-                  value={config.parity}
-                  onValueChange={(v) => saveConfig({ ...config, parity: v })}
-                  disabled={isConnected}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">None</SelectItem>
-                    <SelectItem value="even">Even</SelectItem>
-                    <SelectItem value="odd">Odd</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Stop Bits</Label>
-                <Select
-                  value={config.stopBits.toString()}
-                  onValueChange={(v) => saveConfig({ ...config, stopBits: parseInt(v) })}
-                  disabled={isConnected}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="1">1</SelectItem>
-                    <SelectItem value="2">2</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Middleware URL</Label>
-                <Input
-                  value={config.middlewareUrl}
-                  onChange={(e) => saveConfig({ ...config, middlewareUrl: e.target.value })}
-                  placeholder="ws://localhost:8765"
-                  disabled={isConnected}
-                />
-              </div>
+        <GlassCard className="p-4">
+          <h3 className="font-semibold mb-4">Serial Port Configuration</h3>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            <div className="space-y-2">
+              <Label>COM Port</Label>
+              <Input
+                value={config.port}
+                onChange={(e) => saveConfig({ ...config, port: e.target.value })}
+                placeholder="COM3"
+                disabled={isConnected}
+              />
             </div>
-          </GlassCard>
-        )}
+            <div className="space-y-2">
+              <Label>Baud Rate</Label>
+              <Select
+                value={config.baudRate.toString()}
+                onValueChange={(v) => saveConfig({ ...config, baudRate: parseInt(v) })}
+                disabled={isConnected}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {[4800, 9600, 19200, 38400, 57600, 115200].map(rate => (
+                    <SelectItem key={rate} value={rate.toString()}>{rate}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Parity</Label>
+              <Select
+                value={config.parity}
+                onValueChange={(v) => saveConfig({ ...config, parity: v })}
+                disabled={isConnected}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None</SelectItem>
+                  <SelectItem value="even">Even</SelectItem>
+                  <SelectItem value="odd">Odd</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Stop Bits</Label>
+              <Select
+                value={config.stopBits.toString()}
+                onValueChange={(v) => saveConfig({ ...config, stopBits: parseInt(v) })}
+                disabled={isConnected}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1">1</SelectItem>
+                  <SelectItem value="2">2</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Middleware URL</Label>
+              <Input
+                value={config.middlewareUrl}
+                onChange={(e) => saveConfig({ ...config, middlewareUrl: e.target.value })}
+                placeholder="ws://localhost:8765"
+                disabled={isConnected}
+              />
+            </div>
+          </div>
+        </GlassCard>
 
         {/* Current Reading */}
         {currentReading && (
