@@ -5,7 +5,6 @@ import { GlassCard } from '@/components/GlassCard';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from '@/hooks/use-toast';
@@ -73,7 +72,13 @@ const ScaleIntegration = () => {
     const saved = localStorage.getItem('scaleReadings');
     if (saved) {
       const parsed = JSON.parse(saved);
-      setReadings(parsed.map((r: any) => ({ ...r, timestamp: new Date(r.timestamp) })));
+      setReadings(parsed.map((r: any) => ({
+        ...r,
+        timestamp: new Date(r.timestamp),
+        weight: r.weight ?? 0,
+        unitPrice: r.unitPrice ?? 0,
+        totalPrice: r.totalPrice ?? 0
+      })));
     }
   };
 
@@ -161,10 +166,11 @@ const ScaleIntegration = () => {
   };
 
   const simulatePOSSend = (reading: ScaleReading) => {
-    console.log(`[POS] Sending total price: KES ${reading.totalPrice.toFixed(2)}`);
+    const total = reading.totalPrice ?? 0;
+    console.log(`[POS] Sending total price: KES ${total.toFixed(2)}`);
     toast({
       title: 'Sent to POS',
-      description: `Total: KES ${reading.totalPrice.toFixed(2)} for ${reading.productName}`
+      description: `Total: KES ${total.toFixed(2)} for ${reading.productName}`
     });
   };
 
@@ -345,21 +351,21 @@ const ScaleIntegration = () => {
                     <Scale className="h-5 w-5 text-muted-foreground" />
                     <div>
                       <p className="text-sm text-muted-foreground">Weight</p>
-                      <p className="font-medium">{currentReading.weight.toFixed(2)} kg</p>
+                      <p className="font-medium">{(currentReading.weight ?? 0).toFixed(2)} kg</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
                     <DollarSign className="h-5 w-5 text-muted-foreground" />
                     <div>
                       <p className="text-sm text-muted-foreground">Unit Price</p>
-                      <p className="font-medium">KES {currentReading.unitPrice.toFixed(2)}</p>
+                      <p className="font-medium">KES {(currentReading.unitPrice ?? 0).toFixed(2)}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
                     <DollarSign className="h-5 w-5 text-primary" />
                     <div>
                       <p className="text-sm text-muted-foreground">Total Price</p>
-                      <p className="text-2xl font-bold text-primary">KES {currentReading.totalPrice.toFixed(2)}</p>
+                      <p className="text-2xl font-bold text-primary">KES {(currentReading.totalPrice ?? 0).toFixed(2)}</p>
                     </div>
                   </div>
                 </div>
@@ -405,9 +411,9 @@ const ScaleIntegration = () => {
                       </td>
                       <td className="py-2 px-3">{reading.plu}</td>
                       <td className="py-2 px-3">{reading.productName}</td>
-                      <td className="py-2 px-3 text-right">{reading.weight.toFixed(2)} kg</td>
-                      <td className="py-2 px-3 text-right">KES {reading.unitPrice.toFixed(2)}</td>
-                      <td className="py-2 px-3 text-right font-medium">KES {reading.totalPrice.toFixed(2)}</td>
+                      <td className="py-2 px-3 text-right">{(reading.weight ?? 0).toFixed(2)} kg</td>
+                      <td className="py-2 px-3 text-right">KES {(reading.unitPrice ?? 0).toFixed(2)}</td>
+                      <td className="py-2 px-3 text-right font-medium">KES {(reading.totalPrice ?? 0).toFixed(2)}</td>
                       <td className="py-2 px-3 text-center">
                         <Badge variant={reading.status === 'success' ? 'default' : 'destructive'} className="text-xs">
                           {reading.status}
