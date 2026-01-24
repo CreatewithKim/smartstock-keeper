@@ -36,6 +36,8 @@ const defaultConfig: ScaleConfig = {
   middlewareUrl: 'ws://localhost:8765'
 };
 
+const RECONNECT_INTERVAL = 3000; // 3 seconds
+
 const ScaleIntegration = () => {
   const [isConnected, setIsConnected] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
@@ -43,7 +45,9 @@ const ScaleIntegration = () => {
   const [readings, setReadings] = useState<ScaleReading[]>([]);
   const [currentReading, setCurrentReading] = useState<ScaleReading | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
+  const [shouldReconnect, setShouldReconnect] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     loadProducts();
@@ -89,43 +93,110 @@ const ScaleIntegration = () => {
   };
 
   const connectToMiddleware = useCallback(() => {
+    // Clear any existing reconnect timeout
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+
+    console.log('Connecting to scale middleware...');
+    setShouldReconnect(true);
+
     try {
       wsRef.current = new WebSocket(config.middlewareUrl);
       
       wsRef.current.onopen = () => {
+        console.log('✅ Scale middleware connected');
         setIsConnected(true);
-        toast({ title: 'Connected', description: 'Connected to scale middleware' });
+        toast({ title: 'Connected', description: 'Scale middleware connected successfully' });
       };
 
       wsRef.current.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          processScaleData(data);
+          console.log('Scale data:', data);
+          
+          // Map middleware data format to our expected format
+          processScaleData({
+            plu: data.product_id || data.plu,
+            weight: data.weight ?? 0
+          });
+          
+          console.log('Product:', data.product_id);
+          console.log('Weight:', data.weight, 'kg');
+          console.log('Total:', 'KES ' + data.total_price);
         } catch (e) {
           console.error('Failed to parse scale data:', e);
         }
       };
 
-      wsRef.current.onerror = () => {
+      wsRef.current.onerror = (error) => {
+        console.error('Scale connection error:', error);
+        setIsConnected(false);
         toast({ title: 'Connection Error', description: 'Failed to connect to middleware', variant: 'destructive' });
       };
 
       wsRef.current.onclose = () => {
+        console.log('Scale disconnected. Reconnecting...');
         setIsConnected(false);
         setIsRunning(false);
+        
+        // Auto-reconnect if we should still be connected
+        if (shouldReconnect) {
+          toast({ title: 'Disconnected', description: 'Attempting to reconnect...', variant: 'destructive' });
+          reconnectTimeoutRef.current = setTimeout(() => {
+            if (shouldReconnect) {
+              connectToMiddleware();
+            }
+          }, RECONNECT_INTERVAL);
+        }
       };
     } catch (e) {
+      console.error('Failed to initialize WebSocket:', e);
       toast({ title: 'Error', description: 'Failed to initialize WebSocket', variant: 'destructive' });
+      
+      // Try to reconnect on error
+      if (shouldReconnect) {
+        reconnectTimeoutRef.current = setTimeout(() => {
+          if (shouldReconnect) {
+            connectToMiddleware();
+          }
+        }, RECONNECT_INTERVAL);
+      }
     }
-  }, [config.middlewareUrl]);
+  }, [config.middlewareUrl, shouldReconnect]);
 
   const disconnect = () => {
+    console.log('Disconnecting from scale middleware...');
+    setShouldReconnect(false);
+    
+    // Clear reconnect timeout
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+    
     if (wsRef.current) {
       wsRef.current.close();
+      wsRef.current = null;
     }
     setIsConnected(false);
     setIsRunning(false);
+    toast({ title: 'Disconnected', description: 'Scale middleware disconnected' });
   };
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      setShouldReconnect(false);
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+      }
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
+    };
+  }, []);
 
   const processScaleData = (data: { plu: string; weight: number }) => {
     const product = products.find(p => p.id?.toString() === data.plu || p.name.toLowerCase().includes(data.plu.toLowerCase()));
