@@ -428,6 +428,7 @@ const ScaleIntegration = () => {
           onMappingsChange={setPLUMappings}
           lastReceivedPLU={lastReceivedPLU}
           pluError={pluError}
+          isConnected={isConnected}
         />
 
         {/* Current Reading */}

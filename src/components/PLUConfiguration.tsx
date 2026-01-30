@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Trash2, AlertTriangle, CheckCircle, Settings } from 'lucide-react';
+import { Plus, Trash2, AlertTriangle, CheckCircle, Settings, Zap, Package } from 'lucide-react';
 import { GlassCard } from '@/components/GlassCard';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -20,6 +20,7 @@ interface PLUConfigurationProps {
   onMappingsChange?: (mappings: PLUMapping[]) => void;
   lastReceivedPLU?: string | null;
   pluError?: string | null;
+  isConnected?: boolean;
 }
 
 const PLU_STORAGE_KEY = 'pluMappings';
@@ -44,7 +45,7 @@ export const findProductByPLU = (plu: string, mappings: PLUMapping[]): PLUMappin
   return mappings.find(m => m.plu === plu);
 };
 
-export const PLUConfiguration = ({ onMappingsChange, lastReceivedPLU, pluError }: PLUConfigurationProps) => {
+export const PLUConfiguration = ({ onMappingsChange, lastReceivedPLU, pluError, isConnected }: PLUConfigurationProps) => {
   const [mappings, setMappings] = useState<PLUMapping[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [newPLU, setNewPLU] = useState('');
@@ -57,6 +58,11 @@ export const PLUConfiguration = ({ onMappingsChange, lastReceivedPLU, pluError }
     setMappings(savedMappings);
     onMappingsChange?.(savedMappings);
   }, []);
+
+  // Find the matched product for the last received PLU
+  const detectedMapping = lastReceivedPLU ? findProductByPLU(lastReceivedPLU, mappings) : undefined;
+  const isPLUDetected = !!lastReceivedPLU;
+  const isPLUMatched = !!detectedMapping;
 
   const loadProducts = async () => {
     const allProducts = await productDB.getAll();
@@ -130,6 +136,88 @@ export const PLUConfiguration = ({ onMappingsChange, lastReceivedPLU, pluError }
           >
             {isExpanded ? 'Collapse' : 'Expand'}
           </Button>
+        </div>
+      </div>
+
+      {/* PLU Detection Status - Shows real-time PLU detection from scale */}
+      <div className={`mb-4 p-4 rounded-lg border-2 transition-all duration-300 ${
+        !isConnected 
+          ? 'bg-muted/30 border-muted'
+          : isPLUDetected
+            ? isPLUMatched
+              ? 'bg-green-500/10 border-green-500/50'
+              : 'bg-destructive/10 border-destructive/50'
+            : 'bg-primary/5 border-primary/30'
+      }`}>
+        <div className="flex items-center gap-3">
+          <div className={`h-10 w-10 rounded-full flex items-center justify-center ${
+            !isConnected
+              ? 'bg-muted'
+              : isPLUDetected
+                ? isPLUMatched
+                  ? 'bg-green-500/20'
+                  : 'bg-destructive/20'
+                : 'bg-primary/20'
+          }`}>
+            {isPLUDetected ? (
+              isPLUMatched ? (
+                <CheckCircle className="h-5 w-5 text-green-500" />
+              ) : (
+                <AlertTriangle className="h-5 w-5 text-destructive" />
+              )
+            ) : (
+              <Zap className={`h-5 w-5 ${isConnected ? 'text-primary animate-pulse' : 'text-muted-foreground'}`} />
+            )}
+          </div>
+          
+          <div className="flex-1">
+            <div className="flex items-center gap-2">
+              <span className="font-semibold">
+                {!isConnected 
+                  ? 'Scale Not Connected'
+                  : isPLUDetected 
+                    ? isPLUMatched 
+                      ? 'PLU Matched' 
+                      : 'PLU Not Found'
+                    : 'Waiting for PLU Selection...'}
+              </span>
+              {isPLUDetected && (
+                <Badge variant={isPLUMatched ? 'default' : 'destructive'} className="text-xs">
+                  PLU: {lastReceivedPLU}
+                </Badge>
+              )}
+            </div>
+            
+            {isPLUDetected && isPLUMatched && detectedMapping && (
+              <div className="flex items-center gap-4 mt-1 text-sm">
+                <span className="flex items-center gap-1">
+                  <Package className="h-3 w-3 text-muted-foreground" />
+                  {detectedMapping.productName}
+                </span>
+                <span className="text-muted-foreground">
+                  KES {detectedMapping.unitPrice.toFixed(2)}/kg
+                </span>
+              </div>
+            )}
+            
+            {isPLUDetected && !isPLUMatched && (
+              <p className="text-sm text-destructive mt-1">
+                PLU "{lastReceivedPLU}" is not configured. Add it below.
+              </p>
+            )}
+            
+            {!isConnected && (
+              <p className="text-sm text-muted-foreground mt-1">
+                Connect to the scale middleware to detect PLU selections.
+              </p>
+            )}
+            
+            {isConnected && !isPLUDetected && (
+              <p className="text-sm text-muted-foreground">
+                Press a product number + PLU button on the scale (e.g., 1 + PLU)
+              </p>
+            )}
+          </div>
         </div>
       </div>
 
