@@ -429,6 +429,7 @@ const ScaleIntegration = () => {
           lastReceivedPLU={lastReceivedPLU}
           pluError={pluError}
           isConnected={isConnected}
+          wsRef={wsRef}
         />
 
         {/* Current Reading */}

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Trash2, AlertTriangle, CheckCircle, Settings, Zap, Package } from 'lucide-react';
+import { Plus, Trash2, AlertTriangle, CheckCircle, Settings, Zap, Package, RefreshCw, Cloud, CloudOff } from 'lucide-react';
 import { GlassCard } from '@/components/GlassCard';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,6 +21,7 @@ interface PLUConfigurationProps {
   lastReceivedPLU?: string | null;
   pluError?: string | null;
   isConnected?: boolean;
+  wsRef?: React.RefObject<WebSocket | null>;
 }
 
 const PLU_STORAGE_KEY = 'pluMappings';
@@ -37,20 +38,29 @@ export const loadPLUMappings = (): PLUMapping[] => {
   return [];
 };
 
-export const savePLUMappings = (mappings: PLUMapping[]) => {
+export const savePLUMappings = (mappings: PLUMapping[], wsRef?: React.RefObject<WebSocket | null>) => {
   localStorage.setItem(PLU_STORAGE_KEY, JSON.stringify(mappings));
+  
+  // Sync to middleware config.json via WebSocket
+  if (wsRef?.current && wsRef.current.readyState === WebSocket.OPEN) {
+    wsRef.current.send(JSON.stringify({
+      type: 'update_plu_config',
+      plu_mappings: mappings
+    }));
+  }
 };
 
 export const findProductByPLU = (plu: string, mappings: PLUMapping[]): PLUMapping | undefined => {
   return mappings.find(m => m.plu === plu);
 };
 
-export const PLUConfiguration = ({ onMappingsChange, lastReceivedPLU, pluError, isConnected }: PLUConfigurationProps) => {
+export const PLUConfiguration = ({ onMappingsChange, lastReceivedPLU, pluError, isConnected, wsRef }: PLUConfigurationProps) => {
   const [mappings, setMappings] = useState<PLUMapping[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [newPLU, setNewPLU] = useState('');
   const [selectedProductId, setSelectedProductId] = useState<string>('');
   const [isExpanded, setIsExpanded] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'error' | null>(null);
 
   useEffect(() => {
     loadProducts();
@@ -58,6 +68,48 @@ export const PLUConfiguration = ({ onMappingsChange, lastReceivedPLU, pluError, 
     setMappings(savedMappings);
     onMappingsChange?.(savedMappings);
   }, []);
+
+  // Listen for WebSocket messages for PLU config sync
+  useEffect(() => {
+    if (!wsRef?.current) return;
+    
+    const ws = wsRef.current;
+    
+    const handleMessage = (event: MessageEvent) => {
+      try {
+        const data = JSON.parse(event.data);
+        
+        if (data.type === 'plu_config_updated') {
+          if (data.success) {
+            setSyncStatus('synced');
+            toast({ title: 'Synced', description: 'PLU configuration synced to middleware' });
+          } else {
+            setSyncStatus('error');
+            toast({ title: 'Sync Error', description: data.message, variant: 'destructive' });
+          }
+        }
+        
+        // When we first connect, middleware sends current PLU config
+        if (data.type === 'connected' && data.plu_prices) {
+          // Merge middleware PLUs with local if needed
+          console.log('Middleware PLU prices:', data.plu_prices);
+        }
+        
+        // Handle sync from other clients
+        if (data.type === 'plu_config_sync' && data.plu_prices) {
+          console.log('PLU config synced from another client:', data.plu_prices);
+        }
+      } catch (e) {
+        // Ignore parse errors
+      }
+    };
+    
+    ws.addEventListener('message', handleMessage);
+    
+    return () => {
+      ws.removeEventListener('message', handleMessage);
+    };
+  }, [wsRef?.current]);
 
   // Find the matched product for the last received PLU
   const detectedMapping = lastReceivedPLU ? findProductByPLU(lastReceivedPLU, mappings) : undefined;
@@ -100,20 +152,22 @@ export const PLUConfiguration = ({ onMappingsChange, lastReceivedPLU, pluError, 
 
     const updated = [...mappings, newMapping];
     setMappings(updated);
-    savePLUMappings(updated);
+    savePLUMappings(updated, wsRef);
     onMappingsChange?.(updated);
+    setSyncStatus('syncing');
 
     setNewPLU('');
     setSelectedProductId('');
-    toast({ title: 'Success', description: `PLU ${newPLU} mapped to ${product.name}` });
+    toast({ title: 'Success', description: `PLU ${newPLU} mapped to ${product.name} (syncing to middleware...)` });
   };
 
   const removeMapping = (plu: string) => {
     const updated = mappings.filter(m => m.plu !== plu);
     setMappings(updated);
-    savePLUMappings(updated);
+    savePLUMappings(updated, wsRef);
     onMappingsChange?.(updated);
-    toast({ title: 'Removed', description: `PLU ${plu} mapping removed` });
+    setSyncStatus('syncing');
+    toast({ title: 'Removed', description: `PLU ${plu} mapping removed (syncing to middleware...)` });
   };
 
   const unmappedProducts = products.filter(
@@ -128,6 +182,21 @@ export const PLUConfiguration = ({ onMappingsChange, lastReceivedPLU, pluError, 
           PLU Configuration
         </h3>
         <div className="flex items-center gap-2">
+          {syncStatus && (
+            <Badge 
+              variant={syncStatus === 'synced' ? 'default' : syncStatus === 'syncing' ? 'secondary' : 'destructive'}
+              className="gap-1 text-xs"
+            >
+              {syncStatus === 'syncing' ? (
+                <RefreshCw className="h-3 w-3 animate-spin" />
+              ) : syncStatus === 'synced' ? (
+                <Cloud className="h-3 w-3" />
+              ) : (
+                <CloudOff className="h-3 w-3" />
+              )}
+              {syncStatus === 'syncing' ? 'Syncing...' : syncStatus === 'synced' ? 'Synced' : 'Sync Error'}
+            </Badge>
+          )}
           <Badge variant="outline">{mappings.length} mapped</Badge>
           <Button
             variant="ghost"
