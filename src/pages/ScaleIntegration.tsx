@@ -9,7 +9,6 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from '@/hooks/use-toast';
 import { productDB, Product } from '@/services/db';
-import { PLUConfiguration, PLUMapping, loadPLUMappings, findProductByPLU } from '@/components/PLUConfiguration';
 
 interface ScaleReading {
   plu: string;
@@ -47,9 +46,6 @@ const ScaleIntegration = () => {
   const [currentReading, setCurrentReading] = useState<ScaleReading | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [shouldReconnect, setShouldReconnect] = useState(false);
-  const [pluMappings, setPLUMappings] = useState<PLUMapping[]>([]);
-  const [pluError, setPluError] = useState<string | null>(null);
-  const [lastReceivedPLU, setLastReceivedPLU] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -57,7 +53,6 @@ const ScaleIntegration = () => {
     loadProducts();
     loadConfig();
     loadReadings();
-    setPLUMappings(loadPLUMappings());
   }, []);
 
   const loadProducts = async () => {
@@ -204,20 +199,9 @@ const ScaleIntegration = () => {
   }, []);
 
   const processScaleData = (data: { plu: string; weight: number }) => {
-    setLastReceivedPLU(data.plu);
+    const product = products.find(p => p.id?.toString() === data.plu || p.name.toLowerCase().includes(data.plu.toLowerCase()));
     
-    // First, try to find product via PLU mapping
-    const pluMapping = findProductByPLU(data.plu, pluMappings);
-    
-    // Fallback: try to find by product ID or name if no PLU mapping exists
-    const product = pluMapping 
-      ? products.find(p => p.id === pluMapping.productId)
-      : products.find(p => p.id?.toString() === data.plu || p.name.toLowerCase().includes(data.plu.toLowerCase()));
-    
-    if (!pluMapping && !product) {
-      const errorMessage = `PLU "${data.plu}" is not configured in the system. Please add this PLU mapping in the PLU Configuration section.`;
-      setPluError(errorMessage);
-      
+    if (!product) {
       const errorReading: ScaleReading = {
         plu: data.plu,
         productName: 'Unknown',
@@ -226,31 +210,20 @@ const ScaleIntegration = () => {
         totalPrice: 0,
         timestamp: new Date(),
         status: 'error',
-        error: errorMessage
+        error: `Unknown PLU: ${data.plu}`
       };
       setCurrentReading(errorReading);
       saveReading(errorReading);
-      
-      toast({ 
-        title: 'PLU Not Found', 
-        description: `Scale sent PLU "${data.plu}" which is not mapped to any product.`,
-        variant: 'destructive'
-      });
       return;
     }
 
-    // Clear any previous PLU error
-    setPluError(null);
-
-    const unitPrice = pluMapping?.unitPrice ?? product?.sellingPrice ?? 0;
-    const productName = pluMapping?.productName ?? product?.name ?? 'Unknown';
-    const totalPrice = Number((data.weight * unitPrice).toFixed(2));
+    const totalPrice = Number((data.weight * product.sellingPrice).toFixed(2));
     
     const reading: ScaleReading = {
       plu: data.plu,
-      productName,
+      productName: product.name,
       weight: Number(data.weight.toFixed(2)),
-      unitPrice,
+      unitPrice: product.sellingPrice,
       totalPrice,
       timestamp: new Date(),
       status: 'success'
@@ -422,15 +395,6 @@ const ScaleIntegration = () => {
             </div>
           </div>
         </GlassCard>
-
-        {/* PLU Configuration */}
-        <PLUConfiguration
-          onMappingsChange={setPLUMappings}
-          lastReceivedPLU={lastReceivedPLU}
-          pluError={pluError}
-          isConnected={isConnected}
-          wsRef={wsRef}
-        />
 
         {/* Current Reading */}
         {currentReading && (

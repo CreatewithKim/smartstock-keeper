@@ -1,8 +1,7 @@
 import { GlassCard } from "@/components/GlassCard";
 import { Button } from "@/components/ui/button";
-import { Database, Download, Trash2, Info, BookOpen } from "lucide-react";
+import { Database, Download, Trash2, Info } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { downloadUserManual } from "@/utils/userManual";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -82,26 +81,6 @@ export default function Settings() {
               SmartStock is a Progressive Web App (PWA) that works completely offline.
               All your data is stored securely on your device.
             </p>
-          </div>
-        </div>
-      </GlassCard>
-
-      {/* User Manual */}
-      <GlassCard>
-        <div className="flex items-start gap-4">
-          <div className="rounded-xl bg-primary/10 p-3">
-            <BookOpen className="h-6 w-6 text-primary" />
-          </div>
-          <div className="flex-1">
-            <h2 className="text-xl font-semibold text-foreground mb-2">User Manual</h2>
-            <p className="text-muted-foreground mb-4">
-              Download the complete user manual with detailed instructions for all features,
-              including scale integration setup and PLU configuration.
-            </p>
-            <Button onClick={downloadUserManual} className="gap-2">
-              <Download className="h-4 w-4" />
-              Download User Manual
-            </Button>
           </div>
         </div>
       </GlassCard>

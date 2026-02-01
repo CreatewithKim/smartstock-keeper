@@ -356,15 +356,13 @@ class ScaleWebSocketServer:
     - Automatic client cleanup on disconnect
     - JSON message broadcasting
     - Connection state management
-    - PLU configuration sync from PWA
     """
     
-    def __init__(self, host: str, port: int, on_plu_update=None):
+    def __init__(self, host: str, port: int):
         self.host = host
         self.port = port
         self.clients: Set[WebSocketServerProtocol] = set()
         self.server = None
-        self.on_plu_update = on_plu_update  # Callback for PLU updates
         
     async def handler(self, websocket: WebSocketServerProtocol) -> None:
         """Handle a new WebSocket client connection."""
@@ -373,13 +371,11 @@ class ScaleWebSocketServer:
         logging.info(f"Client connected: {client_id} (total: {len(self.clients)})")
         
         try:
-            # Send welcome message with current PLU config
-            current_plu = self._get_current_plu_config()
+            # Send welcome message
             await websocket.send(json.dumps({
                 "type": "connected",
                 "message": "Connected to ACLAS PS6X Scale Middleware",
-                "timestamp": datetime.now().isoformat(),
-                "plu_prices": current_plu
+                "timestamp": datetime.now().isoformat()
             }))
             
             # Keep connection alive, handle incoming messages
@@ -387,73 +383,8 @@ class ScaleWebSocketServer:
                 # Handle client messages (e.g., configuration updates)
                 try:
                     data = json.loads(message)
-                    msg_type = data.get('type')
-                    
-                    if msg_type == 'ping':
+                    if data.get('type') == 'ping':
                         await websocket.send(json.dumps({"type": "pong"}))
-                    
-                    elif msg_type == 'get_plu_config':
-                        # Client requesting current PLU configuration
-                        current_plu = self._get_current_plu_config()
-                        await websocket.send(json.dumps({
-                            "type": "plu_config",
-                            "plu_prices": current_plu
-                        }))
-                    
-                    elif msg_type == 'update_plu_config':
-                        # Client sending updated PLU configuration
-                        plu_mappings = data.get('plu_mappings', [])
-                        success = self._update_plu_config(plu_mappings)
-                        
-                        if success and self.on_plu_update:
-                            self.on_plu_update()  # Notify middleware to reload config
-                        
-                        await websocket.send(json.dumps({
-                            "type": "plu_config_updated",
-                            "success": success,
-                            "message": "PLU configuration updated successfully" if success else "Failed to update PLU configuration"
-                        }))
-                        
-                        # Broadcast update to all other clients
-                        if success:
-                            await self._broadcast_plu_update(websocket)
-                    
-                    elif msg_type == 'add_plu':
-                        # Add a single PLU mapping
-                        plu = data.get('plu')
-                        price = data.get('price', 0.0)
-                        success = self._add_plu(plu, price)
-                        
-                        if success and self.on_plu_update:
-                            self.on_plu_update()
-                        
-                        await websocket.send(json.dumps({
-                            "type": "plu_added",
-                            "success": success,
-                            "plu": plu,
-                            "price": price
-                        }))
-                        
-                        if success:
-                            await self._broadcast_plu_update(websocket)
-                    
-                    elif msg_type == 'remove_plu':
-                        # Remove a PLU mapping
-                        plu = data.get('plu')
-                        success = self._remove_plu(plu)
-                        
-                        if success and self.on_plu_update:
-                            self.on_plu_update()
-                        
-                        await websocket.send(json.dumps({
-                            "type": "plu_removed",
-                            "success": success,
-                            "plu": plu
-                        }))
-                        
-                        if success:
-                            await self._broadcast_plu_update(websocket)
-                            
                 except json.JSONDecodeError:
                     pass
                     
@@ -462,111 +393,6 @@ class ScaleWebSocketServer:
         finally:
             self.clients.discard(websocket)
             logging.info(f"Client removed: {client_id} (remaining: {len(self.clients)})")
-    
-    def _get_current_plu_config(self) -> dict:
-        """Read current PLU configuration from config.json."""
-        try:
-            if CONFIG_FILE.exists():
-                with open(CONFIG_FILE, 'r') as f:
-                    config = json.load(f)
-                    return config.get('plu_prices', {})
-        except Exception as e:
-            logging.error(f"Failed to read PLU config: {e}")
-        return {}
-    
-    def _update_plu_config(self, plu_mappings: list) -> bool:
-        """Update PLU configuration in config.json from PWA mappings."""
-        try:
-            # Read current config
-            config = DEFAULT_CONFIG.copy()
-            if CONFIG_FILE.exists():
-                with open(CONFIG_FILE, 'r') as f:
-                    config = json.load(f)
-            
-            # Convert PWA mappings to middleware format
-            # PWA sends: [{plu: "0001", productId: 1, productName: "...", unitPrice: 850}]
-            # Middleware needs: {"0001": 850.00, "0002": 1200.00}
-            plu_prices = {}
-            for mapping in plu_mappings:
-                plu = mapping.get('plu', '')
-                price = float(mapping.get('unitPrice', 0))
-                if plu:
-                    plu_prices[plu] = price
-            
-            config['plu_prices'] = plu_prices
-            
-            # Write back to config.json
-            with open(CONFIG_FILE, 'w') as f:
-                json.dump(config, f, indent=2)
-            
-            logging.info(f"PLU configuration updated: {len(plu_prices)} mappings")
-            return True
-            
-        except Exception as e:
-            logging.error(f"Failed to update PLU config: {e}")
-            return False
-    
-    def _add_plu(self, plu: str, price: float) -> bool:
-        """Add a single PLU to config.json."""
-        try:
-            config = DEFAULT_CONFIG.copy()
-            if CONFIG_FILE.exists():
-                with open(CONFIG_FILE, 'r') as f:
-                    config = json.load(f)
-            
-            if 'plu_prices' not in config:
-                config['plu_prices'] = {}
-            
-            config['plu_prices'][plu] = price
-            
-            with open(CONFIG_FILE, 'w') as f:
-                json.dump(config, f, indent=2)
-            
-            logging.info(f"PLU added: {plu} = {price}")
-            return True
-            
-        except Exception as e:
-            logging.error(f"Failed to add PLU: {e}")
-            return False
-    
-    def _remove_plu(self, plu: str) -> bool:
-        """Remove a PLU from config.json."""
-        try:
-            if not CONFIG_FILE.exists():
-                return False
-            
-            with open(CONFIG_FILE, 'r') as f:
-                config = json.load(f)
-            
-            if 'plu_prices' in config and plu in config['plu_prices']:
-                del config['plu_prices'][plu]
-                
-                with open(CONFIG_FILE, 'w') as f:
-                    json.dump(config, f, indent=2)
-                
-                logging.info(f"PLU removed: {plu}")
-                return True
-            
-            return False
-            
-        except Exception as e:
-            logging.error(f"Failed to remove PLU: {e}")
-            return False
-    
-    async def _broadcast_plu_update(self, sender: WebSocketServerProtocol) -> None:
-        """Broadcast PLU config update to all clients except sender."""
-        current_plu = self._get_current_plu_config()
-        message = json.dumps({
-            "type": "plu_config_sync",
-            "plu_prices": current_plu
-        })
-        
-        for client in self.clients:
-            if client != sender:
-                try:
-                    await client.send(message)
-                except websockets.exceptions.ConnectionClosed:
-                    pass
     
     async def broadcast(self, reading: ScaleReading) -> None:
         """Broadcast a scale reading to all connected clients."""
@@ -667,16 +493,9 @@ class ScaleMiddleware:
         self.scale_reader = SerialScaleReader(self.config)
         self.ws_server = ScaleWebSocketServer(
             self.config['websocket']['host'],
-            self.config['websocket']['port'],
-            on_plu_update=self._reload_plu_config
+            self.config['websocket']['port']
         )
         self.logger = TransactionLogger(LOG_FILE)
-    
-    def _reload_plu_config(self):
-        """Reload PLU configuration after update from PWA."""
-        self.config = load_config()
-        self.scale_reader.parser.plu_prices = self.config['plu_prices']
-        logging.info("PLU configuration reloaded from config.json")
         self.stability = StabilityBuffer(readings=[])
         self.running = False
         
