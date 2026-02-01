@@ -1,82 +1,63 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { Scale, Wifi, WifiOff, Play, Square, Package, DollarSign, Clock, AlertTriangle, CheckCircle } from 'lucide-react';
-import { Layout } from '@/components/Layout';
+import { useState, useEffect, useCallback } from 'react';
+import { Scale, Wifi, WifiOff, Package, DollarSign, AlertTriangle, CheckCircle } from 'lucide-react';
 import { GlassCard } from '@/components/GlassCard';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from '@/hooks/use-toast';
-import { productDB, Product } from '@/services/db';
-
-interface ScaleReading {
-  plu: string;
-  productName: string;
-  weight: number;
-  unitPrice: number;
-  totalPrice: number;
-  timestamp: Date;
-  status: 'success' | 'error' | 'pending';
-  error?: string;
-}
-
-interface ScaleConfig {
-  port: string;
-  baudRate: number;
-  parity: string;
-  stopBits: number;
-  middlewareUrl: string;
-}
-const defaultConfig: ScaleConfig = {
-  port: 'COM3',
-  baudRate: 9600,
-  parity: 'none',
-  stopBits: 1,
-  middlewareUrl: 'ws://localhost:8765'
-};
-
-const RECONNECT_INTERVAL = 3000; // 3 seconds
+import { productDB, Product, salesDB } from '@/services/db';
+import { useScaleConnection } from '@/hooks/useScaleConnection';
+import { ScaleStatusIndicator } from '@/components/scale/ScaleStatusIndicator';
+import { LiveWeightDisplay } from '@/components/scale/LiveWeightDisplay';
+import { SaleConfirmation } from '@/components/scale/SaleConfirmation';
+import { TransactionLog, ScaleReading } from '@/components/scale/TransactionLog';
 
 const ScaleIntegration = () => {
-  const [isConnected, setIsConnected] = useState(false);
-  const [isRunning, setIsRunning] = useState(false);
-  const [config, setConfig] = useState<ScaleConfig>(defaultConfig);
-  const [readings, setReadings] = useState<ScaleReading[]>([]);
-  const [currentReading, setCurrentReading] = useState<ScaleReading | null>(null);
+  const {
+    scaleState,
+    isConnected,
+    isStable,
+    currentWeight,
+    stableWeight,
+    config,
+    lastError,
+    connect,
+    disconnect,
+    resetForNextSale
+  } = useScaleConnection();
+
   const [products, setProducts] = useState<Product[]>([]);
-  const [shouldReconnect, setShouldReconnect] = useState(false);
-  const wsRef = useRef<WebSocket | null>(null);
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [readings, setReadings] = useState<ScaleReading[]>([]);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [manualWeight, setManualWeight] = useState('');
+  const [isProcessing, setIsProcessing] = useState(false);
 
   useEffect(() => {
     loadProducts();
-    loadConfig();
     loadReadings();
   }, []);
+
+  // Auto-resolve product when stable weight received
+  useEffect(() => {
+    if (stableWeight?.productId) {
+      const product = products.find(
+        p => p.id?.toString() === stableWeight.productId || 
+             p.name.toLowerCase().includes(stableWeight.productId.toLowerCase())
+      );
+      setSelectedProduct(product || null);
+    }
+  }, [stableWeight, products]);
 
   const loadProducts = async () => {
     const allProducts = await productDB.getAll();
     setProducts(allProducts);
   };
 
-  const loadConfig = () => {
-    const saved = localStorage.getItem('scaleConfig');
-    if (saved) {
-      setConfig(JSON.parse(saved));
-    }
-  };
-
-  const saveConfig = (newConfig: ScaleConfig) => {
-    setConfig(newConfig);
-    localStorage.setItem('scaleConfig', JSON.stringify(newConfig));
-  };
-
   const loadReadings = () => {
     const saved = localStorage.getItem('scaleReadings');
     if (saved) {
       const parsed = JSON.parse(saved);
-      setReadings(parsed.map((r: any) => ({
+      setReadings(parsed.map((r: ScaleReading) => ({
         ...r,
         timestamp: new Date(r.timestamp),
         weight: r.weight ?? 0,
@@ -87,418 +68,290 @@ const ScaleIntegration = () => {
   };
 
   const saveReading = (reading: ScaleReading) => {
-    const updated = [reading, ...readings].slice(0, 100); // Keep last 100
+    const updated = [reading, ...readings].slice(0, 100);
     setReadings(updated);
     localStorage.setItem('scaleReadings', JSON.stringify(updated));
   };
 
-  const connectToMiddleware = useCallback(() => {
-    // Clear any existing reconnect timeout
-    if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current);
-      reconnectTimeoutRef.current = null;
-    }
+  const handleConfirmSale = useCallback(async () => {
+    if (!stableWeight || !selectedProduct) return;
 
-    console.log('Connecting to scale middleware...');
-    setShouldReconnect(true);
-
+    setIsProcessing(true);
+    
     try {
-      wsRef.current = new WebSocket(config.middlewareUrl);
-      
-      wsRef.current.onopen = () => {
-        console.log('✅ Scale middleware connected');
-        setIsConnected(true);
-        toast({ title: 'Connected', description: 'Scale middleware connected successfully' });
-      };
+      const weight = stableWeight.weight;
+      const totalPrice = Number((weight * selectedProduct.sellingPrice).toFixed(2));
 
-      wsRef.current.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          console.log('Scale data:', data);
-          
-          // Map middleware data format to our expected format
-          processScaleData({
-            plu: data.product_id || data.plu,
-            weight: data.weight ?? 0
-          });
-          
-          console.log('Product:', data.product_id);
-          console.log('Weight:', data.weight, 'kg');
-          console.log('Total:', 'KES ' + data.total_price);
-        } catch (e) {
-          console.error('Failed to parse scale data:', e);
-        }
-      };
+      // Record the sale
+      await salesDB.add({
+        productId: selectedProduct.id!,
+        productName: selectedProduct.name,
+        quantity: weight,
+        unitPrice: selectedProduct.sellingPrice,
+        totalAmount: totalPrice,
+        date: new Date(),
+        notes: `Scale sale - Weight: ${weight.toFixed(3)} kg`
+      });
 
-      wsRef.current.onerror = (error) => {
-        console.error('Scale connection error:', error);
-        setIsConnected(false);
-        toast({ title: 'Connection Error', description: 'Failed to connect to middleware', variant: 'destructive' });
-      };
-
-      wsRef.current.onclose = () => {
-        console.log('Scale disconnected. Reconnecting...');
-        setIsConnected(false);
-        setIsRunning(false);
-        
-        // Auto-reconnect if we should still be connected
-        if (shouldReconnect) {
-          toast({ title: 'Disconnected', description: 'Attempting to reconnect...', variant: 'destructive' });
-          reconnectTimeoutRef.current = setTimeout(() => {
-            if (shouldReconnect) {
-              connectToMiddleware();
-            }
-          }, RECONNECT_INTERVAL);
-        }
-      };
-    } catch (e) {
-      console.error('Failed to initialize WebSocket:', e);
-      toast({ title: 'Error', description: 'Failed to initialize WebSocket', variant: 'destructive' });
-      
-      // Try to reconnect on error
-      if (shouldReconnect) {
-        reconnectTimeoutRef.current = setTimeout(() => {
-          if (shouldReconnect) {
-            connectToMiddleware();
-          }
-        }, RECONNECT_INTERVAL);
-      }
-    }
-  }, [config.middlewareUrl, shouldReconnect]);
-
-  const disconnect = () => {
-    console.log('Disconnecting from scale middleware...');
-    setShouldReconnect(false);
-    
-    // Clear reconnect timeout
-    if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current);
-      reconnectTimeoutRef.current = null;
-    }
-    
-    if (wsRef.current) {
-      wsRef.current.close();
-      wsRef.current = null;
-    }
-    setIsConnected(false);
-    setIsRunning(false);
-    toast({ title: 'Disconnected', description: 'Scale middleware disconnected' });
-  };
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      setShouldReconnect(false);
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-      }
-      if (wsRef.current) {
-        wsRef.current.close();
-      }
-    };
-  }, []);
-
-  const processScaleData = (data: { plu: string; weight: number }) => {
-    const product = products.find(p => p.id?.toString() === data.plu || p.name.toLowerCase().includes(data.plu.toLowerCase()));
-    
-    if (!product) {
-      const errorReading: ScaleReading = {
-        plu: data.plu,
-        productName: 'Unknown',
-        weight: data.weight,
-        unitPrice: 0,
-        totalPrice: 0,
+      // Save reading
+      const reading: ScaleReading = {
+        plu: stableWeight.productId || selectedProduct.id?.toString() || '',
+        productName: selectedProduct.name,
+        weight,
+        unitPrice: selectedProduct.sellingPrice,
+        totalPrice,
         timestamp: new Date(),
-        status: 'error',
-        error: `Unknown PLU: ${data.plu}`
+        status: 'success'
       };
-      setCurrentReading(errorReading);
-      saveReading(errorReading);
+      saveReading(reading);
+
+      toast({
+        title: 'Sale Completed',
+        description: `KES ${totalPrice.toFixed(2)} - ${selectedProduct.name}`
+      });
+
+      // Reset for next sale
+      resetForNextSale();
+      setSelectedProduct(null);
+    } catch (error) {
+      console.error('Sale error:', error);
+      toast({
+        title: 'Sale Failed',
+        description: error instanceof Error ? error.message : 'Failed to process sale',
+        variant: 'destructive'
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  }, [stableWeight, selectedProduct, resetForNextSale, readings]);
+
+  const handleCancelSale = useCallback(() => {
+    resetForNextSale();
+    setSelectedProduct(null);
+  }, [resetForNextSale]);
+
+  const handleManualSale = useCallback(async () => {
+    if (!selectedProduct || !manualWeight) return;
+
+    const weight = parseFloat(manualWeight);
+    if (isNaN(weight) || weight <= 0) {
+      toast({ title: 'Invalid Weight', description: 'Please enter a valid weight', variant: 'destructive' });
       return;
     }
 
-    const totalPrice = Number((data.weight * product.sellingPrice).toFixed(2));
+    setIsProcessing(true);
     
-    const reading: ScaleReading = {
-      plu: data.plu,
-      productName: product.name,
-      weight: Number(data.weight.toFixed(2)),
-      unitPrice: product.sellingPrice,
-      totalPrice,
-      timestamp: new Date(),
-      status: 'success'
-    };
+    try {
+      const totalPrice = Number((weight * selectedProduct.sellingPrice).toFixed(2));
 
-    setCurrentReading(reading);
-    saveReading(reading);
+      await salesDB.add({
+        productId: selectedProduct.id!,
+        productName: selectedProduct.name,
+        quantity: weight,
+        unitPrice: selectedProduct.sellingPrice,
+        totalAmount: totalPrice,
+        date: new Date(),
+        notes: `Manual entry - Weight: ${weight.toFixed(3)} kg`
+      });
 
-    // Simulate sending to POS
-    simulatePOSSend(reading);
-  };
+      const reading: ScaleReading = {
+        plu: selectedProduct.id?.toString() || '',
+        productName: selectedProduct.name,
+        weight,
+        unitPrice: selectedProduct.sellingPrice,
+        totalPrice,
+        timestamp: new Date(),
+        status: 'success'
+      };
+      saveReading(reading);
 
-  const simulatePOSSend = (reading: ScaleReading) => {
-    const total = reading.totalPrice ?? 0;
-    console.log(`[POS] Sending total price: KES ${total.toFixed(2)}`);
-    toast({
-      title: 'Sent to POS',
-      description: `Total: KES ${total.toFixed(2)} for ${reading.productName}`
-    });
-  };
+      toast({
+        title: 'Sale Completed',
+        description: `KES ${totalPrice.toFixed(2)} - ${selectedProduct.name}`
+      });
 
-  const startReading = () => {
-    setIsRunning(true);
-    if (wsRef.current) {
-      wsRef.current.send(JSON.stringify({ command: 'start', config }));
+      setManualWeight('');
+      setSelectedProduct(null);
+    } catch (error) {
+      console.error('Manual sale error:', error);
+      toast({
+        title: 'Sale Failed',
+        description: error instanceof Error ? error.message : 'Failed to process sale',
+        variant: 'destructive'
+      });
+    } finally {
+      setIsProcessing(false);
     }
-  };
-
-  const stopReading = () => {
-    setIsRunning(false);
-    if (wsRef.current) {
-      wsRef.current.send(JSON.stringify({ command: 'stop' }));
-    }
-  };
+  }, [selectedProduct, manualWeight, readings]);
 
   const clearReadings = () => {
     setReadings([]);
-    setCurrentReading(null);
     localStorage.removeItem('scaleReadings');
     toast({ title: 'Cleared', description: 'All readings have been cleared' });
   };
 
   return (
-    <Layout>
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-xl bg-primary/20 flex items-center justify-center">
-              <Scale className="h-5 w-5 text-primary" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold">Scale Integration</h1>
-              <p className="text-sm text-muted-foreground">ACLAS PS6X Middleware Controller</p>
-            </div>
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 rounded-xl bg-primary/20 flex items-center justify-center">
+            <Scale className="h-5 w-5 text-primary" />
           </div>
-          <Badge variant={isConnected ? 'default' : 'secondary'} className="gap-1">
-            {isConnected ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
-            {isConnected ? 'Connected' : 'Disconnected'}
-          </Badge>
+          <div>
+            <h1 className="text-2xl font-bold">Scale Integration</h1>
+            <p className="text-sm text-muted-foreground">ACLAS PS6X Live Weighing</p>
+          </div>
+        </div>
+        <ScaleStatusIndicator scaleState={scaleState} />
+      </div>
+
+      {/* Connection Controls */}
+      <GlassCard className="p-4">
+        <div className="flex flex-wrap items-center gap-4">
+          {!isConnected ? (
+            <Button onClick={connect} className="gap-2">
+              <Wifi className="h-4 w-4" />
+              Connect Scale
+            </Button>
+          ) : (
+            <Button variant="destructive" onClick={disconnect} className="gap-2">
+              <WifiOff className="h-4 w-4" />
+              Disconnect
+            </Button>
+          )}
+          
+          <p className="text-sm text-muted-foreground">
+            Middleware: <code className="bg-muted px-2 py-1 rounded">{config.middlewareUrl}</code>
+          </p>
+        </div>
+      </GlassCard>
+
+      {/* Main Content Grid */}
+      <div className="grid lg:grid-cols-2 gap-6">
+        {/* Left Column - Live Weight */}
+        <div className="space-y-6">
+          <LiveWeightDisplay
+            scaleState={scaleState}
+            currentWeight={currentWeight}
+            stableWeight={stableWeight}
+            lastError={lastError}
+          />
+
+          {/* Sale Confirmation - Shows when weight is stable */}
+          {isStable && stableWeight && (
+            <SaleConfirmation
+              stableWeight={stableWeight}
+              product={selectedProduct}
+              onConfirm={handleConfirmSale}
+              onCancel={handleCancelSale}
+              isProcessing={isProcessing}
+            />
+          )}
         </div>
 
-        {/* Connection Controls */}
-        <GlassCard className="p-4">
-          <div className="flex flex-wrap items-center gap-4">
-            {!isConnected ? (
-              <Button onClick={connectToMiddleware} className="gap-2">
-                <Wifi className="h-4 w-4" />
-                Connect Middleware
-              </Button>
-            ) : (
-              <>
-                <Button variant="destructive" onClick={disconnect} className="gap-2">
-                  <WifiOff className="h-4 w-4" />
-                  Disconnect
-                </Button>
-                
-                {!isRunning ? (
-                  <Button onClick={startReading} className="gap-2 bg-green-600 hover:bg-green-700">
-                    <Play className="h-4 w-4" />
-                    Start Reading
-                  </Button>
-                ) : (
-                  <Button onClick={stopReading} variant="secondary" className="gap-2">
-                    <Square className="h-4 w-4" />
-                    Stop Reading
-                  </Button>
-                )}
-              </>
-            )}
-
-            <Button variant="outline" onClick={clearReadings} className="ml-auto">
-              Clear History
-            </Button>
-          </div>
-        </GlassCard>
-
-        {/* Configuration */}
-        <GlassCard className="p-4">
-          <h3 className="font-semibold mb-4">Serial Port Configuration</h3>
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-            <div className="space-y-2">
-              <Label>COM Port</Label>
-              <Input
-                value={config.port}
-                onChange={(e) => saveConfig({ ...config, port: e.target.value })}
-                placeholder="COM3"
-                disabled={isConnected}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Baud Rate</Label>
-              <Select
-                value={config.baudRate.toString()}
-                onValueChange={(v) => saveConfig({ ...config, baudRate: parseInt(v) })}
-                disabled={isConnected}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {[4800, 9600, 19200, 38400, 57600, 115200].map(rate => (
-                    <SelectItem key={rate} value={rate.toString()}>{rate}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Parity</Label>
-              <Select
-                value={config.parity}
-                onValueChange={(v) => saveConfig({ ...config, parity: v })}
-                disabled={isConnected}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">None</SelectItem>
-                  <SelectItem value="even">Even</SelectItem>
-                  <SelectItem value="odd">Odd</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Stop Bits</Label>
-              <Select
-                value={config.stopBits.toString()}
-                onValueChange={(v) => saveConfig({ ...config, stopBits: parseInt(v) })}
-                disabled={isConnected}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="1">1</SelectItem>
-                  <SelectItem value="2">2</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Middleware URL</Label>
-              <Input
-                value={config.middlewareUrl}
-                onChange={(e) => saveConfig({ ...config, middlewareUrl: e.target.value })}
-                placeholder="ws://localhost:8765"
-                disabled={isConnected}
-              />
-            </div>
-          </div>
-        </GlassCard>
-
-        {/* Current Reading */}
-        {currentReading && (
-          <GlassCard className={`p-6 border-2 ${currentReading.status === 'success' ? 'border-green-500/50' : 'border-destructive/50'}`}>
-            <div className="flex items-start justify-between">
+        {/* Right Column - Manual Entry / Product Selection */}
+        <div className="space-y-6">
+          {/* Manual Entry - Only when disconnected or no stable weight */}
+          {(!isConnected || !isStable) && (
+            <GlassCard className="p-4">
+              <h3 className="font-semibold mb-4 flex items-center gap-2">
+                <Package className="h-4 w-4" />
+                {isConnected ? 'Product Selection' : 'Manual Entry'}
+              </h3>
+              
               <div className="space-y-4">
-                <div className="flex items-center gap-2">
-                  {currentReading.status === 'success' ? (
-                    <CheckCircle className="h-5 w-5 text-green-500" />
-                  ) : (
-                    <AlertTriangle className="h-5 w-5 text-destructive" />
-                  )}
-                  <span className="text-lg font-semibold">Current Reading</span>
-                </div>
-                
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                  <div className="flex items-center gap-3">
-                    <Package className="h-5 w-5 text-muted-foreground" />
-                    <div>
-                      <p className="text-sm text-muted-foreground">Product</p>
-                      <p className="font-medium">{currentReading.productName}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <Scale className="h-5 w-5 text-muted-foreground" />
-                    <div>
-                      <p className="text-sm text-muted-foreground">Weight</p>
-                      <p className="font-medium">{(currentReading.weight ?? 0).toFixed(2)} kg</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <DollarSign className="h-5 w-5 text-muted-foreground" />
-                    <div>
-                      <p className="text-sm text-muted-foreground">Unit Price</p>
-                      <p className="font-medium">KES {(currentReading.unitPrice ?? 0).toFixed(2)}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <DollarSign className="h-5 w-5 text-primary" />
-                    <div>
-                      <p className="text-sm text-muted-foreground">Total Price</p>
-                      <p className="text-2xl font-bold text-primary">KES {(currentReading.totalPrice ?? 0).toFixed(2)}</p>
-                    </div>
-                  </div>
+                <div className="space-y-2">
+                  <Label>Select Product</Label>
+                  <select
+                    className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm"
+                    value={selectedProduct?.id || ''}
+                    onChange={(e) => {
+                      const product = products.find(p => p.id === parseInt(e.target.value));
+                      setSelectedProduct(product || null);
+                    }}
+                  >
+                    <option value="">-- Select Product --</option>
+                    {products.map(product => (
+                      <option key={product.id} value={product.id}>
+                        {product.name} - KES {product.sellingPrice}/kg
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
-                {currentReading.error && (
-                  <p className="text-sm text-destructive">{currentReading.error}</p>
+                {!isConnected && (
+                  <>
+                    <div className="space-y-2">
+                      <Label>Weight (kg)</Label>
+                      <Input
+                        type="number"
+                        step="0.001"
+                        min="0"
+                        value={manualWeight}
+                        onChange={(e) => setManualWeight(e.target.value)}
+                        placeholder="Enter weight in kg"
+                      />
+                    </div>
+
+                    {selectedProduct && manualWeight && (
+                      <div className="p-4 rounded-lg bg-muted/50">
+                        <div className="flex justify-between text-sm mb-2">
+                          <span>Unit Price:</span>
+                          <span>KES {selectedProduct.sellingPrice.toFixed(2)}/kg</span>
+                        </div>
+                        <div className="flex justify-between font-semibold text-lg">
+                          <span>Total:</span>
+                          <span className="text-primary">
+                            KES {(parseFloat(manualWeight || '0') * selectedProduct.sellingPrice).toFixed(2)}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    <Button
+                      className="w-full"
+                      onClick={handleManualSale}
+                      disabled={!selectedProduct || !manualWeight || isProcessing}
+                    >
+                      <CheckCircle className="h-4 w-4 mr-2" />
+                      {isProcessing ? 'Processing...' : 'Complete Manual Sale'}
+                    </Button>
+                  </>
+                )}
+
+                {isConnected && !isStable && (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    Place item on scale. Weight will lock automatically when stable.
+                  </p>
                 )}
               </div>
-            </div>
-          </GlassCard>
-        )}
-
-        {/* Reading History */}
-        <GlassCard className="p-4">
-          <h3 className="font-semibold mb-4 flex items-center gap-2">
-            <Clock className="h-4 w-4" />
-            Transaction Log
-          </h3>
-          
-          {readings.length === 0 ? (
-            <p className="text-center text-muted-foreground py-8">
-              No readings yet. Connect and start reading to see transactions.
-            </p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border">
-                    <th className="text-left py-2 px-3">Time</th>
-                    <th className="text-left py-2 px-3">PLU</th>
-                    <th className="text-left py-2 px-3">Product</th>
-                    <th className="text-right py-2 px-3">Weight</th>
-                    <th className="text-right py-2 px-3">Unit Price</th>
-                    <th className="text-right py-2 px-3">Total</th>
-                    <th className="text-center py-2 px-3">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {readings.map((reading, index) => (
-                    <tr key={index} className="border-b border-border/50 hover:bg-muted/20">
-                      <td className="py-2 px-3 text-muted-foreground">
-                        {reading.timestamp.toLocaleTimeString()}
-                      </td>
-                      <td className="py-2 px-3">{reading.plu}</td>
-                      <td className="py-2 px-3">{reading.productName}</td>
-                      <td className="py-2 px-3 text-right">{(reading.weight ?? 0).toFixed(2)} kg</td>
-                      <td className="py-2 px-3 text-right">KES {(reading.unitPrice ?? 0).toFixed(2)}</td>
-                      <td className="py-2 px-3 text-right font-medium">KES {(reading.totalPrice ?? 0).toFixed(2)}</td>
-                      <td className="py-2 px-3 text-center">
-                        <Badge variant={reading.status === 'success' ? 'default' : 'destructive'} className="text-xs">
-                          {reading.status}
-                        </Badge>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            </GlassCard>
           )}
-        </GlassCard>
+
+          {/* Connection Status Info */}
+          {!isConnected && (
+            <GlassCard className="p-4 border border-yellow-500/30 bg-yellow-500/5">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="h-5 w-5 text-yellow-500 mt-0.5" />
+                <div>
+                  <h4 className="font-medium">Scale Not Connected</h4>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Manual weight entry is available. Connect to the scale middleware for live weighing.
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Configure serial port settings in Settings → Scale Configuration
+                  </p>
+                </div>
+              </div>
+            </GlassCard>
+          )}
+        </div>
       </div>
-    </Layout>
+
+      {/* Transaction Log */}
+      <TransactionLog readings={readings} onClear={clearReadings} />
+    </div>
   );
 };
 

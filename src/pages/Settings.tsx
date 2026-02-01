@@ -1,6 +1,7 @@
+import { useState, useEffect } from "react";
 import { GlassCard } from "@/components/GlassCard";
 import { Button } from "@/components/ui/button";
-import { Database, Download, Trash2, Info } from "lucide-react";
+import { Database, Download, Trash2, Info, Scale } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
   AlertDialog,
@@ -13,9 +14,37 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { ScaleConfiguration } from "@/components/scale/ScaleConfiguration";
+import { ScaleConfig } from "@/hooks/useScaleConnection";
+
+const DEFAULT_SCALE_CONFIG: ScaleConfig = {
+  port: 'COM3',
+  baudRate: 9600,
+  parity: 'none',
+  stopBits: 1,
+  middlewareUrl: 'ws://127.0.0.1:8765'
+};
 
 export default function Settings() {
   const { toast } = useToast();
+  const [scaleConfig, setScaleConfig] = useState<ScaleConfig>(DEFAULT_SCALE_CONFIG);
+
+  useEffect(() => {
+    const saved = localStorage.getItem('scaleConfig');
+    if (saved) {
+      setScaleConfig(JSON.parse(saved));
+    }
+  }, []);
+
+  const handleScaleConfigChange = (updates: Partial<ScaleConfig>) => {
+    const updated = { ...scaleConfig, ...updates };
+    setScaleConfig(updated);
+    localStorage.setItem('scaleConfig', JSON.stringify(updated));
+    toast({
+      title: "Configuration Saved",
+      description: "Scale settings have been updated",
+    });
+  };
 
   const handleBackup = async () => {
     try {
@@ -64,6 +93,22 @@ export default function Settings() {
       <div>
         <h1 className="text-4xl font-bold text-foreground mb-2">Settings</h1>
         <p className="text-muted-foreground">Manage your app settings and data</p>
+      </div>
+
+      {/* Scale Configuration */}
+      <div className="space-y-2">
+        <div className="flex items-center gap-2 px-1">
+          <Scale className="h-4 w-4 text-primary" />
+          <h2 className="font-semibold text-foreground">Scale Configuration</h2>
+        </div>
+        <ScaleConfiguration 
+          config={scaleConfig} 
+          onConfigChange={handleScaleConfigChange}
+          disabled={false}
+        />
+        <p className="text-xs text-muted-foreground px-1">
+          Configure the serial port settings for your ACLAS PS6X weighing scale. Changes take effect on next connection.
+        </p>
       </div>
 
       {/* App Info */}
