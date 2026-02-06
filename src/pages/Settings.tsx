@@ -22,7 +22,6 @@ const DEFAULT_SCALE_CONFIG: ScaleConfig = {
   baudRate: 9600,
   parity: 'none',
   stopBits: 1,
-  middlewareUrl: 'ws://127.0.0.1:8765'
 };
 
 export default function Settings() {
@@ -32,7 +31,13 @@ export default function Settings() {
   useEffect(() => {
     const saved = localStorage.getItem('scaleConfig');
     if (saved) {
-      setScaleConfig(JSON.parse(saved));
+      try {
+        const parsed = JSON.parse(saved);
+        const { middlewareUrl, ...rest } = parsed;
+        setScaleConfig({ ...DEFAULT_SCALE_CONFIG, ...rest });
+      } catch {
+        setScaleConfig(DEFAULT_SCALE_CONFIG);
+      }
     }
   }, []);
 
@@ -48,7 +53,6 @@ export default function Settings() {
 
   const handleBackup = async () => {
     try {
-      // This is a placeholder for backup functionality
       toast({
         title: "Backup Created",
         description: "Your data has been backed up successfully",
@@ -64,7 +68,6 @@ export default function Settings() {
 
   const handleClearData = async () => {
     try {
-      // Clear IndexedDB
       const dbName = "smartstock-db";
       const request = indexedDB.deleteDatabase(dbName);
       

@@ -1,5 +1,6 @@
-import { Scale, Lock, AlertTriangle } from 'lucide-react';
+import { Scale, Lock, AlertTriangle, CheckCircle } from 'lucide-react';
 import { GlassCard } from '@/components/GlassCard';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { ScaleState, WeightData } from '@/hooks/useScaleConnection';
 
@@ -8,6 +9,9 @@ interface LiveWeightDisplayProps {
   currentWeight: WeightData | null;
   stableWeight: WeightData | null;
   lastError?: string | null;
+  onCompleteSale?: () => void;
+  completeSaleDisabled?: boolean;
+  isProcessing?: boolean;
   className?: string;
 }
 
@@ -16,12 +20,16 @@ export function LiveWeightDisplay({
   currentWeight, 
   stableWeight,
   lastError,
+  onCompleteSale,
+  completeSaleDisabled = true,
+  isProcessing = false,
   className 
 }: LiveWeightDisplayProps) {
   const displayWeight = stableWeight?.weight ?? currentWeight?.weight ?? 0;
   const isStable = scaleState === 'STABLE';
   const isWeighing = scaleState === 'WEIGHING';
   const isDisconnected = scaleState === 'DISCONNECTED';
+  const canCompleteSale = isStable && !completeSaleDisabled && !isProcessing;
 
   return (
     <GlassCard 
@@ -82,6 +90,30 @@ export function LiveWeightDisplay({
         <div className="text-lg text-muted-foreground mt-1">kg</div>
       </div>
 
+      {/* Complete Sale Button */}
+      {onCompleteSale && (
+        <div className="mt-4">
+          <Button
+            onClick={onCompleteSale}
+            disabled={!canCompleteSale}
+            className={cn(
+              'w-full gap-2 text-base py-5',
+              canCompleteSale 
+                ? 'bg-green-600 hover:bg-green-700' 
+                : ''
+            )}
+          >
+            <CheckCircle className="h-5 w-5" />
+            {isProcessing ? 'Processing...' : 'Complete Sale'}
+          </Button>
+          {!isStable && scaleState !== 'DISCONNECTED' && (
+            <p className="text-xs text-muted-foreground text-center mt-2">
+              Waiting for weight to stabilize...
+            </p>
+          )}
+        </div>
+      )}
+
       {lastError && (
         <div className="flex items-center gap-2 mt-4 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
           <AlertTriangle className="h-4 w-4 flex-shrink-0" />
@@ -91,7 +123,7 @@ export function LiveWeightDisplay({
 
       {isDisconnected && !lastError && (
         <p className="text-center text-sm text-muted-foreground mt-4">
-          Connect to the scale middleware for live weighing
+          Connect to the scale for live weighing
         </p>
       )}
     </GlassCard>
