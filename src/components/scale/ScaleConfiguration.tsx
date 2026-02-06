@@ -28,7 +28,7 @@ export function ScaleConfiguration({ config, onConfigChange, disabled = false }:
         </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="space-y-2">
           <Label>COM Port</Label>
           <Input
@@ -61,7 +61,7 @@ export function ScaleConfiguration({ config, onConfigChange, disabled = false }:
           <Label>Parity</Label>
           <Select
             value={config.parity}
-            onValueChange={(v) => onConfigChange({ parity: v })}
+            onValueChange={(v) => onConfigChange({ parity: v as 'none' | 'even' | 'odd' })}
             disabled={disabled}
           >
             <SelectTrigger>
@@ -93,16 +93,6 @@ export function ScaleConfiguration({ config, onConfigChange, disabled = false }:
               ))}
             </SelectContent>
           </Select>
-        </div>
-        
-        <div className="space-y-2">
-          <Label>Middleware URL</Label>
-          <Input
-            value={config.middlewareUrl}
-            onChange={(e) => onConfigChange({ middlewareUrl: e.target.value })}
-            placeholder="ws://127.0.0.1:8765"
-            disabled={disabled}
-          />
         </div>
       </div>
     </GlassCard>

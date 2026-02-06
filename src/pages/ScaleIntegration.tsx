@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Scale, Wifi, WifiOff, Package, DollarSign, AlertTriangle, CheckCircle } from 'lucide-react';
+import { Scale, Wifi, WifiOff, Package, AlertTriangle, CheckCircle, Usb } from 'lucide-react';
 import { GlassCard } from '@/components/GlassCard';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,7 +9,6 @@ import { productDB, Product, salesDB } from '@/services/db';
 import { useScaleConnection } from '@/hooks/useScaleConnection';
 import { ScaleStatusIndicator } from '@/components/scale/ScaleStatusIndicator';
 import { LiveWeightDisplay } from '@/components/scale/LiveWeightDisplay';
-import { SaleConfirmation } from '@/components/scale/SaleConfirmation';
 import { TransactionLog, ScaleReading } from '@/components/scale/TransactionLog';
 
 const ScaleIntegration = () => {
@@ -37,14 +36,14 @@ const ScaleIntegration = () => {
     loadReadings();
   }, []);
 
-  // Auto-resolve product when stable weight received
+  // Auto-resolve product when stable weight received with PLU
   useEffect(() => {
     if (stableWeight?.productId) {
       const product = products.find(
         p => p.id?.toString() === stableWeight.productId || 
-             p.name.toLowerCase().includes(stableWeight.productId.toLowerCase())
+             p.name.toLowerCase().includes(stableWeight.productId!.toLowerCase())
       );
-      setSelectedProduct(product || null);
+      if (product) setSelectedProduct(product);
     }
   }, [stableWeight, products]);
 
@@ -82,7 +81,6 @@ const ScaleIntegration = () => {
       const weight = stableWeight.weight;
       const totalPrice = Number((weight * selectedProduct.sellingPrice).toFixed(2));
 
-      // Record the sale
       await salesDB.add({
         productId: selectedProduct.id!,
         productName: selectedProduct.name,
@@ -93,7 +91,6 @@ const ScaleIntegration = () => {
         notes: `Scale sale - Weight: ${weight.toFixed(3)} kg`
       });
 
-      // Save reading
       const reading: ScaleReading = {
         plu: stableWeight.productId || selectedProduct.id?.toString() || '',
         productName: selectedProduct.name,
@@ -110,7 +107,6 @@ const ScaleIntegration = () => {
         description: `KES ${totalPrice.toFixed(2)} - ${selectedProduct.name}`
       });
 
-      // Reset for next sale
       resetForNextSale();
       setSelectedProduct(null);
     } catch (error) {
@@ -124,11 +120,6 @@ const ScaleIntegration = () => {
       setIsProcessing(false);
     }
   }, [stableWeight, selectedProduct, resetForNextSale, readings]);
-
-  const handleCancelSale = useCallback(() => {
-    resetForNextSale();
-    setSelectedProduct(null);
-  }, [resetForNextSale]);
 
   const handleManualSale = useCallback(async () => {
     if (!selectedProduct || !manualWeight) return;
@@ -200,7 +191,7 @@ const ScaleIntegration = () => {
           </div>
           <div>
             <h1 className="text-2xl font-bold">Scale Integration</h1>
-            <p className="text-sm text-muted-foreground">ACLAS PS6X Live Weighing</p>
+            <p className="text-sm text-muted-foreground">ACLAS PS6X Serial Connection</p>
           </div>
         </div>
         <ScaleStatusIndicator scaleState={scaleState} />
@@ -211,7 +202,7 @@ const ScaleIntegration = () => {
         <div className="flex flex-wrap items-center gap-4">
           {!isConnected ? (
             <Button onClick={connect} className="gap-2">
-              <Wifi className="h-4 w-4" />
+              <Usb className="h-4 w-4" />
               Connect Scale
             </Button>
           ) : (
@@ -222,112 +213,121 @@ const ScaleIntegration = () => {
           )}
           
           <p className="text-sm text-muted-foreground">
-            Middleware: <code className="bg-muted px-2 py-1 rounded">{config.middlewareUrl}</code>
+            Serial: <code className="bg-muted px-2 py-1 rounded">{config.baudRate} baud, parity: {config.parity}, stop: {config.stopBits}</code>
           </p>
         </div>
       </GlassCard>
 
       {/* Main Content Grid */}
       <div className="grid lg:grid-cols-2 gap-6">
-        {/* Left Column - Live Weight */}
+        {/* Left Column - Live Weight + Complete Sale */}
         <div className="space-y-6">
           <LiveWeightDisplay
             scaleState={scaleState}
             currentWeight={currentWeight}
             stableWeight={stableWeight}
             lastError={lastError}
+            onCompleteSale={handleConfirmSale}
+            completeSaleDisabled={!selectedProduct || isProcessing}
+            isProcessing={isProcessing}
           />
-
-          {/* Sale Confirmation - Shows when weight is stable */}
-          {isStable && stableWeight && (
-            <SaleConfirmation
-              stableWeight={stableWeight}
-              product={selectedProduct}
-              onConfirm={handleConfirmSale}
-              onCancel={handleCancelSale}
-              isProcessing={isProcessing}
-            />
-          )}
         </div>
 
-        {/* Right Column - Manual Entry / Product Selection */}
+        {/* Right Column - Product Selection / Manual Entry */}
         <div className="space-y-6">
-          {/* Manual Entry - Only when disconnected or no stable weight */}
-          {(!isConnected || !isStable) && (
-            <GlassCard className="p-4">
-              <h3 className="font-semibold mb-4 flex items-center gap-2">
-                <Package className="h-4 w-4" />
-                {isConnected ? 'Product Selection' : 'Manual Entry'}
-              </h3>
-              
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Select Product</Label>
-                  <select
-                    className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm"
-                    value={selectedProduct?.id || ''}
-                    onChange={(e) => {
-                      const product = products.find(p => p.id === parseInt(e.target.value));
-                      setSelectedProduct(product || null);
-                    }}
-                  >
-                    <option value="">-- Select Product --</option>
-                    {products.map(product => (
-                      <option key={product.id} value={product.id}>
-                        {product.name} - KES {product.sellingPrice}/kg
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {!isConnected && (
-                  <>
-                    <div className="space-y-2">
-                      <Label>Weight (kg)</Label>
-                      <Input
-                        type="number"
-                        step="0.001"
-                        min="0"
-                        value={manualWeight}
-                        onChange={(e) => setManualWeight(e.target.value)}
-                        placeholder="Enter weight in kg"
-                      />
-                    </div>
-
-                    {selectedProduct && manualWeight && (
-                      <div className="p-4 rounded-lg bg-muted/50">
-                        <div className="flex justify-between text-sm mb-2">
-                          <span>Unit Price:</span>
-                          <span>KES {selectedProduct.sellingPrice.toFixed(2)}/kg</span>
-                        </div>
-                        <div className="flex justify-between font-semibold text-lg">
-                          <span>Total:</span>
-                          <span className="text-primary">
-                            KES {(parseFloat(manualWeight || '0') * selectedProduct.sellingPrice).toFixed(2)}
-                          </span>
-                        </div>
-                      </div>
-                    )}
-
-                    <Button
-                      className="w-full"
-                      onClick={handleManualSale}
-                      disabled={!selectedProduct || !manualWeight || isProcessing}
-                    >
-                      <CheckCircle className="h-4 w-4 mr-2" />
-                      {isProcessing ? 'Processing...' : 'Complete Manual Sale'}
-                    </Button>
-                  </>
-                )}
-
-                {isConnected && !isStable && (
-                  <p className="text-sm text-muted-foreground text-center py-4">
-                    Place item on scale. Weight will lock automatically when stable.
-                  </p>
-                )}
+          <GlassCard className="p-4">
+            <h3 className="font-semibold mb-4 flex items-center gap-2">
+              <Package className="h-4 w-4" />
+              {isConnected ? 'Product Selection' : 'Manual Entry'}
+            </h3>
+            
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>Select Product</Label>
+                <select
+                  className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm"
+                  value={selectedProduct?.id || ''}
+                  onChange={(e) => {
+                    const product = products.find(p => p.id === parseInt(e.target.value));
+                    setSelectedProduct(product || null);
+                  }}
+                >
+                  <option value="">-- Select Product --</option>
+                  {products.map(product => (
+                    <option key={product.id} value={product.id}>
+                      {product.name} - KES {product.sellingPrice}/kg
+                    </option>
+                  ))}
+                </select>
               </div>
-            </GlassCard>
-          )}
+
+              {/* Show price summary when product selected and weight available */}
+              {selectedProduct && isStable && stableWeight && (
+                <div className="p-4 rounded-lg bg-muted/50">
+                  <div className="flex justify-between text-sm mb-2">
+                    <span>Unit Price:</span>
+                    <span>KES {selectedProduct.sellingPrice.toFixed(2)}/kg</span>
+                  </div>
+                  <div className="flex justify-between text-sm mb-2">
+                    <span>Weight:</span>
+                    <span>{stableWeight.weight.toFixed(3)} kg</span>
+                  </div>
+                  <div className="flex justify-between font-semibold text-lg">
+                    <span>Total:</span>
+                    <span className="text-primary">
+                      KES {(stableWeight.weight * selectedProduct.sellingPrice).toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {!isConnected && (
+                <>
+                  <div className="space-y-2">
+                    <Label>Weight (kg)</Label>
+                    <Input
+                      type="number"
+                      step="0.001"
+                      min="0"
+                      value={manualWeight}
+                      onChange={(e) => setManualWeight(e.target.value)}
+                      placeholder="Enter weight in kg"
+                    />
+                  </div>
+
+                  {selectedProduct && manualWeight && (
+                    <div className="p-4 rounded-lg bg-muted/50">
+                      <div className="flex justify-between text-sm mb-2">
+                        <span>Unit Price:</span>
+                        <span>KES {selectedProduct.sellingPrice.toFixed(2)}/kg</span>
+                      </div>
+                      <div className="flex justify-between font-semibold text-lg">
+                        <span>Total:</span>
+                        <span className="text-primary">
+                          KES {(parseFloat(manualWeight || '0') * selectedProduct.sellingPrice).toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  <Button
+                    className="w-full"
+                    onClick={handleManualSale}
+                    disabled={!selectedProduct || !manualWeight || isProcessing}
+                  >
+                    <CheckCircle className="h-4 w-4 mr-2" />
+                    {isProcessing ? 'Processing...' : 'Complete Manual Sale'}
+                  </Button>
+                </>
+              )}
+
+              {isConnected && !isStable && (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  Place item on scale. Weight will lock automatically when stable.
+                </p>
+              )}
+            </div>
+          </GlassCard>
 
           {/* Connection Status Info */}
           {!isConnected && (
@@ -337,7 +337,7 @@ const ScaleIntegration = () => {
                 <div>
                   <h4 className="font-medium">Scale Not Connected</h4>
                   <p className="text-sm text-muted-foreground mt-1">
-                    Manual weight entry is available. Connect to the scale middleware for live weighing.
+                    Manual weight entry is available. Click "Connect Scale" to open a serial port to the ACLAS PS6X.
                   </p>
                   <p className="text-xs text-muted-foreground mt-2">
                     Configure serial port settings in Settings → Scale Configuration

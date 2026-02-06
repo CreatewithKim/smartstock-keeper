@@ -6,9 +6,8 @@ export type ScaleState = 'DISCONNECTED' | 'CONNECTED' | 'WEIGHING' | 'STABLE';
 export interface ScaleConfig {
   port: string;
   baudRate: number;
-  parity: string;
+  parity: ParityType;
   stopBits: number;
-  middlewareUrl: string;
 }
 
 export interface WeightData {
@@ -18,222 +17,236 @@ export interface WeightData {
   timestamp: Date;
 }
 
-export interface PLUConfig {
-  [plu: string]: number;
-}
+// Web Serial API parity type
+type ParityType = 'none' | 'even' | 'odd';
 
 const DEFAULT_CONFIG: ScaleConfig = {
   port: 'COM3',
   baudRate: 9600,
   parity: 'none',
   stopBits: 1,
-  middlewareUrl: 'ws://127.0.0.1:8765'
 };
 
-const RECONNECT_INTERVAL = 3000;
-const HEARTBEAT_INTERVAL = 30000;
-const WEIGHT_CHANGE_THRESHOLD = 0.01; // kg
+const STABILITY_THRESHOLD = 0.01; // kg
+const STABILITY_READINGS_REQUIRED = 3;
+const DUPLICATE_TIMEOUT = 2000; // ms
+
+// ACLAS PS6X parser patterns
+const PATTERNS = {
+  full: /P(\d{4,6})W([+-]?\d+\.?\d*)U(\d+\.?\d*)T(\d+\.?\d*)/,
+  plu_weight: /P(\d{4,6})W([+-]?\d+\.?\d*)/,
+  weight_only: /W([+-]?\d+\.?\d*)/,
+  simple: /(\d+\.?\d*)\s*[kK][gG]/,
+};
+
+function parseScaleData(text: string): { weight: number; productId?: string } | null {
+  if (!text.trim()) return null;
+
+  let match = PATTERNS.full.exec(text);
+  if (match) return { productId: match[1], weight: parseFloat(match[2]) };
+
+  match = PATTERNS.plu_weight.exec(text);
+  if (match) return { productId: match[1], weight: parseFloat(match[2]) };
+
+  match = PATTERNS.weight_only.exec(text);
+  if (match) return { weight: parseFloat(match[1]) };
+
+  match = PATTERNS.simple.exec(text);
+  if (match) return { weight: parseFloat(match[1]) };
+
+  return null;
+}
 
 export function useScaleConnection() {
   const [scaleState, setScaleState] = useState<ScaleState>('DISCONNECTED');
   const [config, setConfig] = useState<ScaleConfig>(() => {
     const saved = localStorage.getItem('scaleConfig');
-    return saved ? JSON.parse(saved) : DEFAULT_CONFIG;
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        // Strip out legacy middlewareUrl if present
+        const { middlewareUrl, ...rest } = parsed;
+        return { ...DEFAULT_CONFIG, ...rest };
+      } catch {
+        return DEFAULT_CONFIG;
+      }
+    }
+    return DEFAULT_CONFIG;
   });
   const [currentWeight, setCurrentWeight] = useState<WeightData | null>(null);
   const [stableWeight, setStableWeight] = useState<WeightData | null>(null);
-  const [pluConfig, setPluConfig] = useState<PLUConfig>({});
   const [lastError, setLastError] = useState<string | null>(null);
 
-  const wsRef = useRef<WebSocket | null>(null);
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const shouldReconnectRef = useRef(false);
-  const lastStableWeightRef = useRef<number>(0);
+  const portRef = useRef<any>(null);
+  const readerRef = useRef<ReadableStreamDefaultReader<string> | null>(null);
+  const runningRef = useRef(false);
 
-  const clearTimers = useCallback(() => {
-    if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current);
-      reconnectTimeoutRef.current = null;
-    }
-    if (heartbeatIntervalRef.current) {
-      clearInterval(heartbeatIntervalRef.current);
-      heartbeatIntervalRef.current = null;
-    }
+  // Stability tracking
+  const readingsBuffer = useRef<number[]>([]);
+  const lastSentWeight = useRef<number | null>(null);
+  const lastSentTime = useRef<number>(0);
+
+  const isStableReading = useCallback((weight: number): boolean => {
+    const buf = readingsBuffer.current;
+    buf.push(weight);
+    if (buf.length > 10) buf.shift();
+
+    if (buf.length < STABILITY_READINGS_REQUIRED) return false;
+    const recent = buf.slice(-STABILITY_READINGS_REQUIRED);
+    return Math.max(...recent) - Math.min(...recent) <= STABILITY_THRESHOLD;
   }, []);
 
-  const startHeartbeat = useCallback(() => {
-    if (heartbeatIntervalRef.current) {
-      clearInterval(heartbeatIntervalRef.current);
-    }
-    
-    heartbeatIntervalRef.current = setInterval(() => {
-      if (wsRef.current?.readyState === WebSocket.OPEN) {
-        wsRef.current.send(JSON.stringify({ type: 'ping' }));
-      }
-    }, HEARTBEAT_INTERVAL);
+  const isDuplicate = useCallback((weight: number): boolean => {
+    if (lastSentWeight.current === null) return false;
+    if (Math.abs(weight - lastSentWeight.current) > STABILITY_THRESHOLD) return false;
+    return Date.now() - lastSentTime.current < DUPLICATE_TIMEOUT;
   }, []);
 
-  const handleMessage = useCallback((event: MessageEvent) => {
+  const readLoop = useCallback(async (port: any) => {
+    const textDecoder = new TextDecoderStream();
+    const readableStreamClosed = port.readable!.pipeTo(textDecoder.writable);
+    const reader = textDecoder.readable.getReader();
+    readerRef.current = reader;
+
+    let lineBuffer = '';
+
     try {
-      const data = JSON.parse(event.data);
-      console.log('Scale message:', data);
-      setLastError(null);
+      while (runningRef.current) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        if (!value) continue;
 
-      switch (data.type) {
-        case 'weight_update':
-          // Live weight update - weight is changing
-          setScaleState('WEIGHING');
-          setCurrentWeight({
-            weight: data.weight ?? 0,
-            stable: false,
-            timestamp: new Date(data.timestamp || Date.now())
-          });
+        lineBuffer += value;
+        const lines = lineBuffer.split(/[\r\n]+/);
+        lineBuffer = lines.pop() || '';
+
+        for (const line of lines) {
+          const parsed = parseScaleData(line);
+          if (!parsed || parsed.weight <= 0) continue;
+
+          const weight = parsed.weight;
           
-          // Check if weight changed significantly (item removed or changed)
-          if (stableWeight && Math.abs(data.weight - lastStableWeightRef.current) > WEIGHT_CHANGE_THRESHOLD) {
+          // Always update current weight (live display)
+          setCurrentWeight({
+            weight,
+            stable: false,
+            productId: parsed.productId,
+            timestamp: new Date(),
+          });
+          setScaleState('WEIGHING');
+          setLastError(null);
+
+          // Check stability
+          if (isStableReading(weight) && !isDuplicate(weight)) {
+            const avgWeight = readingsBuffer.current
+              .slice(-STABILITY_READINGS_REQUIRED)
+              .reduce((a, b) => a + b, 0) / STABILITY_READINGS_REQUIRED;
+            const rounded = Math.round(avgWeight * 1000) / 1000;
+
+            const stableData: WeightData = {
+              weight: rounded,
+              stable: true,
+              productId: parsed.productId,
+              timestamp: new Date(),
+            };
+            setCurrentWeight(stableData);
+            setStableWeight(stableData);
+            setScaleState('STABLE');
+            lastSentWeight.current = rounded;
+            lastSentTime.current = Date.now();
+          } else if (
+            stableWeight &&
+            Math.abs(weight - (lastSentWeight.current ?? 0)) > STABILITY_THRESHOLD
+          ) {
+            // Weight changed significantly — reset stable
             setStableWeight(null);
           }
-          break;
-
-        case 'stable_weight':
-          // Weight is stable - ready for sale
-          setScaleState('STABLE');
-          const stableData: WeightData = {
-            weight: data.weight ?? 0,
-            stable: true,
-            productId: data.product_id,
-            timestamp: new Date(data.timestamp || Date.now())
-          };
-          setCurrentWeight(stableData);
-          setStableWeight(stableData);
-          lastStableWeightRef.current = data.weight ?? 0;
-          break;
-
-        case 'plu_config':
-          // PLU configuration sync from middleware
-          if (data.data) {
-            setPluConfig(data.data);
-            console.log('PLU config received:', data.data);
-          }
-          break;
-
-        case 'pong':
-          // Heartbeat response - connection is alive
-          console.log('Heartbeat received');
-          break;
-
-        case 'error':
-          setLastError(data.message || 'Unknown scale error');
-          toast({
-            title: 'Scale Error',
-            description: data.message || 'Unknown error from scale',
-            variant: 'destructive'
-          });
-          break;
-
-        default:
-          console.log('Unknown message type:', data.type);
+        }
       }
-    } catch (e) {
-      console.error('Failed to parse scale message:', e);
+    } catch (e: unknown) {
+      if (runningRef.current) {
+        const msg = e instanceof Error ? e.message : 'Serial read error';
+        console.error('Serial read error:', e);
+        setLastError(msg);
+      }
+    } finally {
+      reader.releaseLock();
+      await readableStreamClosed.catch(() => {});
     }
-  }, [stableWeight]);
+  }, [isStableReading, isDuplicate, stableWeight]);
 
-  const connect = useCallback(() => {
-    clearTimers();
-    shouldReconnectRef.current = true;
+  const connect = useCallback(async () => {
     setLastError(null);
 
-    console.log('Connecting to scale middleware at', config.middlewareUrl);
+    if (!('serial' in navigator)) {
+      const msg = 'Web Serial API not supported. Use Chrome or Edge.';
+      setLastError(msg);
+      toast({ title: 'Not Supported', description: msg, variant: 'destructive' });
+      return;
+    }
 
     try {
-      wsRef.current = new WebSocket(config.middlewareUrl);
+      const port = await (navigator as any).serial.requestPort();
+      await port.open({
+        baudRate: config.baudRate,
+        parity: config.parity,
+        stopBits: config.stopBits as 1 | 2,
+        dataBits: 8,
+      });
 
-      wsRef.current.onopen = () => {
-        console.log('✅ Scale middleware connected');
-        setScaleState('CONNECTED');
-        setLastError(null);
-        startHeartbeat();
-        
-        // Send initial config to middleware
-        wsRef.current?.send(JSON.stringify({ 
-          type: 'config',
-          config: {
-            port: config.port,
-            baudRate: config.baudRate,
-            parity: config.parity,
-            stopBits: config.stopBits
-          }
-        }));
+      portRef.current = port;
+      runningRef.current = true;
+      readingsBuffer.current = [];
+      lastSentWeight.current = null;
+      setScaleState('CONNECTED');
+      setLastError(null);
 
-        toast({ 
-          title: 'Scale Connected', 
-          description: 'Real-time weighing is now active' 
-        });
-      };
+      toast({ title: 'Scale Connected', description: `Serial port opened at ${config.baudRate} baud` });
 
-      wsRef.current.onmessage = handleMessage;
-
-      wsRef.current.onerror = (error) => {
-        console.error('Scale connection error:', error);
-        setLastError('Connection error');
-        setScaleState('DISCONNECTED');
-      };
-
-      wsRef.current.onclose = () => {
-        console.log('Scale disconnected');
-        setScaleState('DISCONNECTED');
-        clearTimers();
-
-        if (shouldReconnectRef.current) {
-          toast({ 
-            title: 'Scale Disconnected', 
-            description: 'Attempting to reconnect...', 
-            variant: 'destructive' 
-          });
-          
-          reconnectTimeoutRef.current = setTimeout(() => {
-            if (shouldReconnectRef.current) {
-              connect();
-            }
-          }, RECONNECT_INTERVAL);
+      readLoop(port).then(() => {
+        if (runningRef.current) {
+          // Unexpected end
+          setScaleState('DISCONNECTED');
+          setLastError('Serial connection ended unexpectedly');
         }
-      };
-    } catch (e) {
-      console.error('Failed to initialize WebSocket:', e);
-      setLastError('Failed to initialize connection');
-      
-      if (shouldReconnectRef.current) {
-        reconnectTimeoutRef.current = setTimeout(() => {
-          if (shouldReconnectRef.current) {
-            connect();
-          }
-        }, RECONNECT_INTERVAL);
-      }
+      });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Failed to open serial port';
+      console.error('Serial connect error:', e);
+      setLastError(msg);
+      setScaleState('DISCONNECTED');
+      toast({ title: 'Connection Failed', description: msg, variant: 'destructive' });
     }
-  }, [config, clearTimers, startHeartbeat, handleMessage]);
+  }, [config, readLoop]);
 
-  const disconnect = useCallback(() => {
-    console.log('Disconnecting from scale middleware');
-    shouldReconnectRef.current = false;
-    clearTimers();
+  const disconnect = useCallback(async () => {
+    runningRef.current = false;
 
-    if (wsRef.current) {
-      wsRef.current.close();
-      wsRef.current = null;
+    if (readerRef.current) {
+      try {
+        await readerRef.current.cancel();
+      } catch {}
+      readerRef.current = null;
+    }
+
+    if (portRef.current) {
+      try {
+        await portRef.current.close();
+      } catch {}
+      portRef.current = null;
     }
 
     setScaleState('DISCONNECTED');
     setCurrentWeight(null);
     setStableWeight(null);
-    toast({ title: 'Scale Disconnected', description: 'Manual weighing mode enabled' });
-  }, [clearTimers]);
+    readingsBuffer.current = [];
+    toast({ title: 'Scale Disconnected', description: 'Serial port closed' });
+  }, []);
 
   const resetForNextSale = useCallback(() => {
-    // Reset to connected state after sale completion
     setStableWeight(null);
-    lastStableWeightRef.current = 0;
+    lastSentWeight.current = null;
+    readingsBuffer.current = [];
     if (scaleState === 'STABLE') {
       setScaleState('CONNECTED');
     }
@@ -248,30 +261,28 @@ export function useScaleConnection() {
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      shouldReconnectRef.current = false;
-      clearTimers();
-      if (wsRef.current) {
-        wsRef.current.close();
+      runningRef.current = false;
+      if (readerRef.current) {
+        readerRef.current.cancel().catch(() => {});
+      }
+      if (portRef.current) {
+        portRef.current.close().catch(() => {});
       }
     };
-  }, [clearTimers]);
+  }, []);
 
   return {
-    // State
     scaleState,
     isConnected: scaleState !== 'DISCONNECTED',
     isStable: scaleState === 'STABLE',
     isWeighing: scaleState === 'WEIGHING',
     currentWeight,
     stableWeight,
-    pluConfig,
     config,
     lastError,
-
-    // Actions
     connect,
     disconnect,
     resetForNextSale,
-    updateConfig
+    updateConfig,
   };
 }
