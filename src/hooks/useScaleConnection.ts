@@ -31,27 +31,42 @@ const STABILITY_THRESHOLD = 0.01; // kg
 const STABILITY_READINGS_REQUIRED = 3;
 const DUPLICATE_TIMEOUT = 2000; // ms
 
-// ACLAS PS6X parser patterns
+// ACLAS PS6X parser patterns (ordered most-specific → least-specific)
 const PATTERNS = {
+  // Full ACLAS: P0001W1.234U5.00T0.100
   full: /P(\d{4,6})W([+-]?\d+\.?\d*)U(\d+\.?\d*)T(\d+\.?\d*)/,
+  // PLU + weight: P0001W1.234
   plu_weight: /P(\d{4,6})W([+-]?\d+\.?\d*)/,
-  weight_only: /W([+-]?\d+\.?\d*)/,
-  simple: /(\d+\.?\d*)\s*[kK][gG]/,
+  // Weight field: W1.234 or w1.234
+  weight_only: /[Ww]([+-]?\d+\.?\d*)/,
+  // With unit: 1.234 kg or 1.234kg
+  with_unit: /(\d+\.?\d*)\s*[kK][gG]/,
+  // Stable indicator prefix (some scales send "ST,GS, 1.234 kg" or "ST, 1.234")
+  stable_prefix: /(?:ST|GS|NT)[,\s]+[+-]?\s*(\d+\.?\d*)/i,
+  // Bare decimal number on a line (last resort): "  1.234  "
+  bare_number: /^\s*([+-]?\d+\.\d+)\s*$/,
 };
 
 function parseScaleData(text: string): { weight: number; productId?: string } | null {
-  if (!text.trim()) return null;
+  const trimmed = text.trim();
+  if (!trimmed) return null;
 
-  let match = PATTERNS.full.exec(text);
+  let match = PATTERNS.full.exec(trimmed);
   if (match) return { productId: match[1], weight: parseFloat(match[2]) };
 
-  match = PATTERNS.plu_weight.exec(text);
+  match = PATTERNS.plu_weight.exec(trimmed);
   if (match) return { productId: match[1], weight: parseFloat(match[2]) };
 
-  match = PATTERNS.weight_only.exec(text);
+  match = PATTERNS.weight_only.exec(trimmed);
   if (match) return { weight: parseFloat(match[1]) };
 
-  match = PATTERNS.simple.exec(text);
+  match = PATTERNS.with_unit.exec(trimmed);
+  if (match) return { weight: parseFloat(match[1]) };
+
+  match = PATTERNS.stable_prefix.exec(trimmed);
+  if (match) return { weight: parseFloat(match[1]) };
+
+  match = PATTERNS.bare_number.exec(trimmed);
   if (match) return { weight: parseFloat(match[1]) };
 
   return null;
@@ -121,8 +136,13 @@ export function useScaleConnection() {
         lineBuffer = lines.pop() || '';
 
         for (const line of lines) {
+          if (line.trim()) {
+            console.log('[Scale raw]', JSON.stringify(line));
+          }
           const parsed = parseScaleData(line);
-          if (!parsed || parsed.weight <= 0) continue;
+          if (!parsed) continue;
+          // Allow weight of 0 (tare) but skip negative
+          if (parsed.weight < 0) continue;
 
           const weight = parsed.weight;
           
