@@ -258,8 +258,40 @@ export function useScaleConnection() {
     localStorage.setItem('scaleConfig', JSON.stringify(updated));
   }, [config]);
 
-  // Cleanup on unmount
+  // Auto-connect on mount using previously granted ports
   useEffect(() => {
+    const autoConnect = async () => {
+      if (!('serial' in navigator)) return;
+      try {
+        const ports = await (navigator as any).serial.getPorts();
+        if (ports.length > 0) {
+          const port = ports[0];
+          await port.open({
+            baudRate: config.baudRate,
+            parity: config.parity,
+            stopBits: config.stopBits as 1 | 2,
+            dataBits: 8,
+          });
+          portRef.current = port;
+          runningRef.current = true;
+          readingsBuffer.current = [];
+          lastSentWeight.current = null;
+          setScaleState('CONNECTED');
+          setLastError(null);
+          toast({ title: 'Scale Auto-Connected', description: `Resumed serial at ${config.baudRate} baud` });
+          readLoop(port).then(() => {
+            if (runningRef.current) {
+              setScaleState('DISCONNECTED');
+              setLastError('Serial connection ended unexpectedly');
+            }
+          });
+        }
+      } catch (e) {
+        console.log('Auto-connect skipped:', e);
+      }
+    };
+    autoConnect();
+
     return () => {
       runningRef.current = false;
       if (readerRef.current) {
