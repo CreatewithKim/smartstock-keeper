@@ -17,7 +17,6 @@ export interface WeightData {
   timestamp: Date;
 }
 
-// Web Serial API parity type
 type ParityType = 'none' | 'even' | 'odd';
 
 const DEFAULT_CONFIG: ScaleConfig = {
@@ -31,106 +30,100 @@ const STABILITY_THRESHOLD = 0.01; // kg
 const STABILITY_READINGS_REQUIRED = 3;
 const DUPLICATE_TIMEOUT = 2000; // ms
 
-// ACLAS PS6X parser patterns (ordered most-specific → least-specific)
+// ── Parser ──────────────────────────────────────────────────────────
+// Supports ACLAS PS6X formats + common scale outputs.
+// Kept beyond the basic checklist because raw bytes must be converted
+// to a numeric weight value — the checklist's TextDecoder only gives
+// us a string, we still need to extract the number.
 const PATTERNS = {
-  // Full ACLAS: P0001W1.234U5.00T0.100
   full: /P(\d{4,6})W([+-]?\d+\.?\d*)U(\d+\.?\d*)T(\d+\.?\d*)/,
-  // PLU + weight: P0001W1.234
   plu_weight: /P(\d{4,6})W([+-]?\d+\.?\d*)/,
-  // Weight field: W1.234 or w1.234
   weight_only: /[Ww]([+-]?\d+\.?\d*)/,
-  // With unit: 1.234 kg or 1.234kg
   with_unit: /(\d+\.?\d*)\s*[kK][gG]/,
-  // Stable indicator prefix (some scales send "ST,GS, 1.234 kg" or "ST, 1.234")
   stable_prefix: /(?:ST|GS|NT)[,\s]+[+-]?\s*(\d+\.?\d*)/i,
-  // Bare decimal number on a line (last resort): "  1.234  "
   bare_number: /^\s*([+-]?\d+\.\d+)\s*$/,
 };
 
 function parseScaleData(text: string): { weight: number; productId?: string } | null {
-  const trimmed = text.trim();
-  if (!trimmed) return null;
+  const t = text.trim();
+  if (!t) return null;
 
-  let match = PATTERNS.full.exec(trimmed);
-  if (match) return { productId: match[1], weight: parseFloat(match[2]) };
-
-  match = PATTERNS.plu_weight.exec(trimmed);
-  if (match) return { productId: match[1], weight: parseFloat(match[2]) };
-
-  match = PATTERNS.weight_only.exec(trimmed);
-  if (match) return { weight: parseFloat(match[1]) };
-
-  match = PATTERNS.with_unit.exec(trimmed);
-  if (match) return { weight: parseFloat(match[1]) };
-
-  match = PATTERNS.stable_prefix.exec(trimmed);
-  if (match) return { weight: parseFloat(match[1]) };
-
-  match = PATTERNS.bare_number.exec(trimmed);
-  if (match) return { weight: parseFloat(match[1]) };
-
+  for (const [key, rx] of Object.entries(PATTERNS)) {
+    const m = rx.exec(t);
+    if (!m) continue;
+    if (key === 'full' || key === 'plu_weight') {
+      return { productId: m[1], weight: parseFloat(m[2]) };
+    }
+    return { weight: parseFloat(m[1]) };
+  }
   return null;
 }
 
+// ── Hook ────────────────────────────────────────────────────────────
 export function useScaleConnection() {
   const [scaleState, setScaleState] = useState<ScaleState>('DISCONNECTED');
   const [config, setConfig] = useState<ScaleConfig>(() => {
-    const saved = localStorage.getItem('scaleConfig');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        // Strip out legacy middlewareUrl if present
-        const { middlewareUrl, ...rest } = parsed;
+    try {
+      const saved = localStorage.getItem('scaleConfig');
+      if (saved) {
+        const { middlewareUrl, ...rest } = JSON.parse(saved);
         return { ...DEFAULT_CONFIG, ...rest };
-      } catch {
-        return DEFAULT_CONFIG;
       }
-    }
+    } catch { /* ignore */ }
     return DEFAULT_CONFIG;
   });
   const [currentWeight, setCurrentWeight] = useState<WeightData | null>(null);
   const [stableWeight, setStableWeight] = useState<WeightData | null>(null);
   const [lastError, setLastError] = useState<string | null>(null);
 
-  const portRef = useRef<any>(null);
+  const portRef = useRef<SerialPort | null>(null);
   const readerRef = useRef<ReadableStreamDefaultReader<string> | null>(null);
   const runningRef = useRef(false);
 
-  // Stability tracking
+  // Stability tracking – kept beyond checklist because POS requires
+  // a "locked" weight before a sale can be confirmed.
   const readingsBuffer = useRef<number[]>([]);
   const lastSentWeight = useRef<number | null>(null);
   const lastSentTime = useRef<number>(0);
+  // Use a ref for stableWeight inside the read loop to avoid stale closures
+  const stableWeightRef = useRef<WeightData | null>(null);
+  useEffect(() => { stableWeightRef.current = stableWeight; }, [stableWeight]);
 
-  const isStableReading = useCallback((weight: number): boolean => {
+  const isStableReading = (weight: number): boolean => {
     const buf = readingsBuffer.current;
     buf.push(weight);
     if (buf.length > 10) buf.shift();
-
     if (buf.length < STABILITY_READINGS_REQUIRED) return false;
     const recent = buf.slice(-STABILITY_READINGS_REQUIRED);
     return Math.max(...recent) - Math.min(...recent) <= STABILITY_THRESHOLD;
-  }, []);
+  };
 
-  const isDuplicate = useCallback((weight: number): boolean => {
+  const isDuplicate = (weight: number): boolean => {
     if (lastSentWeight.current === null) return false;
     if (Math.abs(weight - lastSentWeight.current) > STABILITY_THRESHOLD) return false;
     return Date.now() - lastSentTime.current < DUPLICATE_TIMEOUT;
-  }, []);
+  };
 
-  const readLoop = useCallback(async (port: any) => {
+  // ── Core read loop (follows checklist §3 "Read Serial Data") ─────
+  const startReadLoop = useCallback(async (port: SerialPort) => {
+    // Checklist: const reader = port.readable.getReader()
+    // We use TextDecoderStream so we get string chunks directly.
     const textDecoder = new TextDecoderStream();
-    const readableStreamClosed = port.readable!.pipeTo(textDecoder.writable);
+    // @ts-ignore – WritableStream<BufferSource> vs Uint8Array mismatch in strict TS
+    const pipeClosed = port.readable!.pipeTo(textDecoder.writable);
     const reader = textDecoder.readable.getReader();
     readerRef.current = reader;
 
     let lineBuffer = '';
 
     try {
+      // Checklist: while (true) { const { value, done } = await reader.read(); ... }
       while (runningRef.current) {
         const { value, done } = await reader.read();
         if (done) break;
         if (!value) continue;
 
+        // Accumulate and split on newlines (displayData equivalent)
         lineBuffer += value;
         const lines = lineBuffer.split(/[\r\n]+/);
         lineBuffer = lines.pop() || '';
@@ -139,14 +132,13 @@ export function useScaleConnection() {
           if (line.trim()) {
             console.log('[Scale raw]', JSON.stringify(line));
           }
+
           const parsed = parseScaleData(line);
-          if (!parsed) continue;
-          // Allow weight of 0 (tare) but skip negative
-          if (parsed.weight < 0) continue;
+          if (!parsed || parsed.weight < 0) continue;
 
           const weight = parsed.weight;
-          
-          // Always update current weight (live display)
+
+          // Live weight → UI (checklist §3 "Display on Screen")
           setCurrentWeight({
             weight,
             stable: false,
@@ -156,29 +148,28 @@ export function useScaleConnection() {
           setScaleState('WEIGHING');
           setLastError(null);
 
-          // Check stability
+          // Stability check
           if (isStableReading(weight) && !isDuplicate(weight)) {
-            const avgWeight = readingsBuffer.current
+            const avg = readingsBuffer.current
               .slice(-STABILITY_READINGS_REQUIRED)
               .reduce((a, b) => a + b, 0) / STABILITY_READINGS_REQUIRED;
-            const rounded = Math.round(avgWeight * 1000) / 1000;
+            const rounded = Math.round(avg * 1000) / 1000;
 
-            const stableData: WeightData = {
+            const data: WeightData = {
               weight: rounded,
               stable: true,
               productId: parsed.productId,
               timestamp: new Date(),
             };
-            setCurrentWeight(stableData);
-            setStableWeight(stableData);
+            setCurrentWeight(data);
+            setStableWeight(data);
             setScaleState('STABLE');
             lastSentWeight.current = rounded;
             lastSentTime.current = Date.now();
           } else if (
-            stableWeight &&
+            stableWeightRef.current &&
             Math.abs(weight - (lastSentWeight.current ?? 0)) > STABILITY_THRESHOLD
           ) {
-            // Weight changed significantly — reset stable
             setStableWeight(null);
           }
         }
@@ -191,13 +182,39 @@ export function useScaleConnection() {
       }
     } finally {
       reader.releaseLock();
-      await readableStreamClosed.catch(() => {});
+      await pipeClosed.catch(() => {});
     }
-  }, [isStableReading, isDuplicate, stableWeight]);
+  }, []);
 
+  // ── Open a port (shared by manual connect + auto-detect) ─────────
+  const openPort = useCallback(async (port: SerialPort) => {
+    await port.open({
+      baudRate: config.baudRate,
+      parity: config.parity,
+      stopBits: config.stopBits as 1 | 2,
+      dataBits: 8,
+    });
+
+    portRef.current = port;
+    runningRef.current = true;
+    readingsBuffer.current = [];
+    lastSentWeight.current = null;
+    setScaleState('CONNECTED');
+    setLastError(null);
+
+    startReadLoop(port).then(() => {
+      if (runningRef.current) {
+        setScaleState('DISCONNECTED');
+        setLastError('Serial connection ended unexpectedly');
+      }
+    });
+  }, [config, startReadLoop]);
+
+  // ── Checklist §3 "Request Port Access" ───────────────────────────
   const connect = useCallback(async () => {
     setLastError(null);
 
+    // Checklist §5: Check if ('serial' in navigator)
     if (!('serial' in navigator)) {
       const msg = 'Web Serial API not supported. Use Chrome or Edge.';
       setLastError(msg);
@@ -206,53 +223,31 @@ export function useScaleConnection() {
     }
 
     try {
-      const port = await (navigator as any).serial.requestPort();
-      await port.open({
-        baudRate: config.baudRate,
-        parity: config.parity,
-        stopBits: config.stopBits as 1 | 2,
-        dataBits: 8,
-      });
-
-      portRef.current = port;
-      runningRef.current = true;
-      readingsBuffer.current = [];
-      lastSentWeight.current = null;
-      setScaleState('CONNECTED');
-      setLastError(null);
-
+      // Checklist: port = await navigator.serial.requestPort()
+      const port = await navigator.serial.requestPort();
+      await openPort(port);
       toast({ title: 'Scale Connected', description: `Serial port opened at ${config.baudRate} baud` });
-
-      readLoop(port).then(() => {
-        if (runningRef.current) {
-          // Unexpected end
-          setScaleState('DISCONNECTED');
-          setLastError('Serial connection ended unexpectedly');
-        }
-      });
     } catch (e: unknown) {
+      // Checklist §5: Wrap port operations in try/catch
       const msg = e instanceof Error ? e.message : 'Failed to open serial port';
       console.error('Serial connect error:', e);
       setLastError(msg);
       setScaleState('DISCONNECTED');
       toast({ title: 'Connection Failed', description: msg, variant: 'destructive' });
     }
-  }, [config, readLoop]);
+  }, [config, openPort]);
 
+  // ── Disconnect ───────────────────────────────────────────────────
   const disconnect = useCallback(async () => {
     runningRef.current = false;
 
     if (readerRef.current) {
-      try {
-        await readerRef.current.cancel();
-      } catch {}
+      try { await readerRef.current.cancel(); } catch { /* ignore */ }
       readerRef.current = null;
     }
 
     if (portRef.current) {
-      try {
-        await portRef.current.close();
-      } catch {}
+      try { await portRef.current.close(); } catch { /* ignore */ }
       portRef.current = null;
     }
 
@@ -267,9 +262,7 @@ export function useScaleConnection() {
     setStableWeight(null);
     lastSentWeight.current = null;
     readingsBuffer.current = [];
-    if (scaleState === 'STABLE') {
-      setScaleState('CONNECTED');
-    }
+    if (scaleState === 'STABLE') setScaleState('CONNECTED');
   }, [scaleState]);
 
   const updateConfig = useCallback((newConfig: Partial<ScaleConfig>) => {
@@ -278,49 +271,68 @@ export function useScaleConnection() {
     localStorage.setItem('scaleConfig', JSON.stringify(updated));
   }, [config]);
 
-  // Auto-connect on mount using previously granted ports
+  // ── Auto-detect previously authorized port on startup ────────────
   useEffect(() => {
+    if (!('serial' in navigator)) return;
+
     const autoConnect = async () => {
-      if (!('serial' in navigator)) return;
       try {
-        const ports = await (navigator as any).serial.getPorts();
+        const ports = await navigator.serial.getPorts();
         if (ports.length > 0) {
-          const port = ports[0];
-          await port.open({
-            baudRate: config.baudRate,
-            parity: config.parity,
-            stopBits: config.stopBits as 1 | 2,
-            dataBits: 8,
-          });
-          portRef.current = port;
-          runningRef.current = true;
-          readingsBuffer.current = [];
-          lastSentWeight.current = null;
-          setScaleState('CONNECTED');
-          setLastError(null);
+          console.log('[Scale] Auto-detecting previously authorized port…');
+          await openPort(ports[0]);
           toast({ title: 'Scale Auto-Connected', description: `Resumed serial at ${config.baudRate} baud` });
-          readLoop(port).then(() => {
-            if (runningRef.current) {
-              setScaleState('DISCONNECTED');
-              setLastError('Serial connection ended unexpectedly');
-            }
-          });
         }
       } catch (e) {
-        console.log('Auto-connect skipped:', e);
+        console.log('[Scale] Auto-connect skipped:', e);
       }
     };
     autoConnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-    return () => {
+  // ── Checklist §6 "Cleanup" – close port on page unload ──────────
+  useEffect(() => {
+    const cleanup = async () => {
       runningRef.current = false;
       if (readerRef.current) {
-        readerRef.current.cancel().catch(() => {});
+        try { await readerRef.current.cancel(); } catch { /* ignore */ }
       }
       if (portRef.current) {
-        portRef.current.close().catch(() => {});
+        try { await portRef.current.close(); } catch { /* ignore */ }
       }
     };
+
+    window.addEventListener('beforeunload', cleanup);
+
+    // Also clean up on unmount
+    return () => {
+      window.removeEventListener('beforeunload', cleanup);
+      cleanup();
+    };
+  }, []);
+
+  // ── Checklist §5 "Handle disconnect events" ─────────────────────
+  useEffect(() => {
+    if (!('serial' in navigator)) return;
+
+    const onDisconnect = (e: Event) => {
+      const disconnectedPort = (e as any).target;
+      if (disconnectedPort === portRef.current) {
+        console.log('[Scale] Port disconnected');
+        runningRef.current = false;
+        portRef.current = null;
+        readerRef.current = null;
+        setScaleState('DISCONNECTED');
+        setCurrentWeight(null);
+        setStableWeight(null);
+        setLastError('Scale was disconnected');
+        toast({ title: 'Scale Disconnected', description: 'The serial device was removed', variant: 'destructive' });
+      }
+    };
+
+    navigator.serial.addEventListener('disconnect', onDisconnect);
+    return () => navigator.serial.removeEventListener('disconnect', onDisconnect);
   }, []);
 
   return {
