@@ -26,10 +26,8 @@ const DEFAULT_CONFIG: ScaleConfig = {
   stopBits: 1,
 };
 
-const STABILITY_THRESHOLD = 0.02; // kg – tolerance for "not moving"
-const STABILITY_READINGS_REQUIRED = 5; // need 5 consistent readings
-const STABILITY_TIMEOUT_MS = 1500; // weight unchanged for 1.5s = stable
-const DUPLICATE_TIMEOUT = 2000; // ms
+const STOP_MOVING_MS = 800; // weight unchanged for 0.8s = locked
+const MOVEMENT_TOLERANCE = 0.005; // kg – ignore micro-jitter
 
 // ── Hook ────────────────────────────────────────────────────────────
 export function useScaleConnection() {
@@ -52,47 +50,67 @@ export function useScaleConnection() {
   const readerRef = useRef<ReadableStreamDefaultReader<string> | null>(null);
   const runningRef = useRef(false);
 
-  // Stability tracking – POS requires a "locked" weight before sale.
-  const readingsBuffer = useRef<number[]>([]);
-  const lastSentWeight = useRef<number | null>(null);
-  const lastSentTime = useRef<number>(0);
-  const lastChangedTime = useRef<number>(Date.now());
+  // Weight-lock tracking – locks when weight stops moving
   const lastReadingRef = useRef<number | null>(null);
+  const lastChangedTime = useRef<number>(Date.now());
   const stableWeightRef = useRef<WeightData | null>(null);
-  const stabilityTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => { stableWeightRef.current = stableWeight; }, [stableWeight]);
 
-  const isStableReading = (weight: number): boolean => {
-    const buf = readingsBuffer.current;
-    buf.push(weight);
-    if (buf.length > 20) buf.shift();
-    if (buf.length < STABILITY_READINGS_REQUIRED) return false;
-    const recent = buf.slice(-STABILITY_READINGS_REQUIRED);
-    return Math.max(...recent) - Math.min(...recent) <= STABILITY_THRESHOLD;
-  };
-
-  // Time-based: weight hasn't moved beyond threshold for STABILITY_TIMEOUT_MS
-  const checkTimeBasedStability = useCallback((weight: number) => {
-    if (lastReadingRef.current !== null &&
-        Math.abs(weight - lastReadingRef.current) > STABILITY_THRESHOLD) {
-      lastChangedTime.current = Date.now();
-    }
+  // Called on each reading – if weight changed, reset the timer; otherwise let it count
+  const handleWeightReading = useCallback((weight: number) => {
+    const prev = lastReadingRef.current;
     lastReadingRef.current = weight;
-    return (Date.now() - lastChangedTime.current) >= STABILITY_TIMEOUT_MS;
-  }, []);
 
-  const isDuplicate = (weight: number): boolean => {
-    if (lastSentWeight.current === null) return false;
-    if (Math.abs(weight - lastSentWeight.current) > STABILITY_THRESHOLD) return false;
-    return Date.now() - lastSentTime.current < DUPLICATE_TIMEOUT;
-  };
+    const moved = prev !== null && Math.abs(weight - prev) > MOVEMENT_TOLERANCE;
+
+    if (moved) {
+      // Weight is moving – clear any pending lock, unlock if locked
+      lastChangedTime.current = Date.now();
+      if (lockTimerRef.current) {
+        clearTimeout(lockTimerRef.current);
+        lockTimerRef.current = null;
+      }
+      if (stableWeightRef.current) {
+        setStableWeight(null);
+        setScaleState('WEIGHING');
+      }
+    }
+
+    // If not already locked and weight > 0, schedule a lock
+    if (!stableWeightRef.current && weight > 0 && !lockTimerRef.current) {
+      lockTimerRef.current = setTimeout(() => {
+        lockTimerRef.current = null;
+        const current = lastReadingRef.current;
+        if (current !== null && current > 0) {
+          const rounded = Math.round(current * 1000) / 1000;
+          const data: WeightData = {
+            weight: rounded,
+            stable: true,
+            timestamp: new Date(),
+          };
+          setCurrentWeight(data);
+          setStableWeight(data);
+          setScaleState('STABLE');
+        }
+      }, STOP_MOVING_MS);
+    }
+
+    // Zero weight – item removed, unlock
+    if (weight === 0 && stableWeightRef.current) {
+      setStableWeight(null);
+      setScaleState('WEIGHING');
+      if (lockTimerRef.current) {
+        clearTimeout(lockTimerRef.current);
+        lockTimerRef.current = null;
+      }
+    }
+  }, []);
 
   // ── Core read loop (follows checklist §3 "Read Serial Data") ─────
   const startReadLoop = useCallback(async (port: SerialPort) => {
-    // Checklist: const reader = port.readable.getReader()
-    // We use TextDecoderStream so we get string chunks directly.
     const textDecoder = new TextDecoderStream();
-    // @ts-ignore – WritableStream<BufferSource> vs Uint8Array mismatch in strict TS
+    // @ts-ignore
     const pipeClosed = port.readable!.pipeTo(textDecoder.writable);
     const reader = textDecoder.readable.getReader();
     readerRef.current = reader;
@@ -100,13 +118,11 @@ export function useScaleConnection() {
     let lineBuffer = '';
 
     try {
-      // Checklist: while (true) { const { value, done } = await reader.read(); ... }
       while (runningRef.current) {
         const { value, done } = await reader.read();
         if (done) break;
         if (!value) continue;
 
-        // Accumulate and split on newlines (displayData equivalent)
         lineBuffer += value;
         const lines = lineBuffer.split(/[\r\n]+/);
         lineBuffer = lines.pop() || '';
@@ -117,11 +133,8 @@ export function useScaleConnection() {
 
           console.log('[Scale raw]', JSON.stringify(trimmed));
 
-          // Extract any number from the raw signal
           const numMatch = trimmed.match(/([+-]?\d+\.?\d*)/);
           const weight = numMatch ? parseFloat(numMatch[1]) : NaN;
-
-          // Always show raw data as current weight (even if not a number, show 0)
           const displayWeight = isNaN(weight) ? 0 : weight;
 
           setCurrentWeight({
@@ -132,44 +145,8 @@ export function useScaleConnection() {
           setScaleState('WEIGHING');
           setLastError(null);
 
-          // Stability check only if we got a valid number > 0
-          if (!isNaN(weight) && weight > 0) {
-            const bufferStable = isStableReading(weight);
-            const timeStable = checkTimeBasedStability(weight);
-            const isNowStable = (bufferStable || timeStable) && !isDuplicate(weight);
-
-            if (isNowStable) {
-              const avg = readingsBuffer.current
-                .slice(-STABILITY_READINGS_REQUIRED)
-                .reduce((a, b) => a + b, 0) / STABILITY_READINGS_REQUIRED;
-              const rounded = Math.round(avg * 1000) / 1000;
-
-              const data: WeightData = {
-                weight: rounded,
-                stable: true,
-                timestamp: new Date(),
-              };
-              setCurrentWeight(data);
-              setStableWeight(data);
-              setScaleState('STABLE');
-              lastSentWeight.current = rounded;
-              lastSentTime.current = Date.now();
-            } else if (
-              stableWeightRef.current &&
-              Math.abs(weight - (lastSentWeight.current ?? 0)) > STABILITY_THRESHOLD
-            ) {
-              // Weight moved significantly — unlock stable state
-              setStableWeight(null);
-              lastChangedTime.current = Date.now();
-            }
-          } else if (!isNaN(weight) && weight === 0) {
-            // Zero weight — reset stable state (item removed)
-            if (stableWeightRef.current) {
-              setStableWeight(null);
-              readingsBuffer.current = [];
-              lastSentWeight.current = null;
-              lastChangedTime.current = Date.now();
-            }
+          if (!isNaN(weight)) {
+            handleWeightReading(weight);
           }
         }
       }
@@ -196,8 +173,8 @@ export function useScaleConnection() {
 
     portRef.current = port;
     runningRef.current = true;
-    readingsBuffer.current = [];
-    lastSentWeight.current = null;
+    lastReadingRef.current = null;
+    lastChangedTime.current = Date.now();
     setScaleState('CONNECTED');
     setLastError(null);
 
@@ -253,16 +230,18 @@ export function useScaleConnection() {
     setScaleState('DISCONNECTED');
     setCurrentWeight(null);
     setStableWeight(null);
-    readingsBuffer.current = [];
+    lastReadingRef.current = null;
     toast({ title: 'Scale Disconnected', description: 'Serial port closed' });
   }, []);
 
   const resetForNextSale = useCallback(() => {
     setStableWeight(null);
-    lastSentWeight.current = null;
     lastReadingRef.current = null;
     lastChangedTime.current = Date.now();
-    readingsBuffer.current = [];
+    if (lockTimerRef.current) {
+      clearTimeout(lockTimerRef.current);
+      lockTimerRef.current = null;
+    }
     if (scaleState === 'STABLE') setScaleState('CONNECTED');
   }, [scaleState]);
 
