@@ -26,8 +26,9 @@ const DEFAULT_CONFIG: ScaleConfig = {
   stopBits: 1,
 };
 
-const STABILITY_THRESHOLD = 0.01; // kg
-const STABILITY_READINGS_REQUIRED = 3;
+const STABILITY_THRESHOLD = 0.02; // kg – tolerance for "not moving"
+const STABILITY_READINGS_REQUIRED = 5; // need 5 consistent readings
+const STABILITY_TIMEOUT_MS = 1500; // weight unchanged for 1.5s = stable
 const DUPLICATE_TIMEOUT = 2000; // ms
 
 // ── Hook ────────────────────────────────────────────────────────────
@@ -51,23 +52,34 @@ export function useScaleConnection() {
   const readerRef = useRef<ReadableStreamDefaultReader<string> | null>(null);
   const runningRef = useRef(false);
 
-  // Stability tracking – kept beyond checklist because POS requires
-  // a "locked" weight before a sale can be confirmed.
+  // Stability tracking – POS requires a "locked" weight before sale.
   const readingsBuffer = useRef<number[]>([]);
   const lastSentWeight = useRef<number | null>(null);
   const lastSentTime = useRef<number>(0);
-  // Use a ref for stableWeight inside the read loop to avoid stale closures
+  const lastChangedTime = useRef<number>(Date.now());
+  const lastReadingRef = useRef<number | null>(null);
   const stableWeightRef = useRef<WeightData | null>(null);
+  const stabilityTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => { stableWeightRef.current = stableWeight; }, [stableWeight]);
 
   const isStableReading = (weight: number): boolean => {
     const buf = readingsBuffer.current;
     buf.push(weight);
-    if (buf.length > 10) buf.shift();
+    if (buf.length > 20) buf.shift();
     if (buf.length < STABILITY_READINGS_REQUIRED) return false;
     const recent = buf.slice(-STABILITY_READINGS_REQUIRED);
     return Math.max(...recent) - Math.min(...recent) <= STABILITY_THRESHOLD;
   };
+
+  // Time-based: weight hasn't moved beyond threshold for STABILITY_TIMEOUT_MS
+  const checkTimeBasedStability = useCallback((weight: number) => {
+    if (lastReadingRef.current !== null &&
+        Math.abs(weight - lastReadingRef.current) > STABILITY_THRESHOLD) {
+      lastChangedTime.current = Date.now();
+    }
+    lastReadingRef.current = weight;
+    return (Date.now() - lastChangedTime.current) >= STABILITY_TIMEOUT_MS;
+  }, []);
 
   const isDuplicate = (weight: number): boolean => {
     if (lastSentWeight.current === null) return false;
@@ -120,9 +132,13 @@ export function useScaleConnection() {
           setScaleState('WEIGHING');
           setLastError(null);
 
-          // Stability check only if we got a valid number
-          if (!isNaN(weight) && weight >= 0) {
-            if (isStableReading(weight) && !isDuplicate(weight)) {
+          // Stability check only if we got a valid number > 0
+          if (!isNaN(weight) && weight > 0) {
+            const bufferStable = isStableReading(weight);
+            const timeStable = checkTimeBasedStability(weight);
+            const isNowStable = (bufferStable || timeStable) && !isDuplicate(weight);
+
+            if (isNowStable) {
               const avg = readingsBuffer.current
                 .slice(-STABILITY_READINGS_REQUIRED)
                 .reduce((a, b) => a + b, 0) / STABILITY_READINGS_REQUIRED;
@@ -142,7 +158,17 @@ export function useScaleConnection() {
               stableWeightRef.current &&
               Math.abs(weight - (lastSentWeight.current ?? 0)) > STABILITY_THRESHOLD
             ) {
+              // Weight moved significantly — unlock stable state
               setStableWeight(null);
+              lastChangedTime.current = Date.now();
+            }
+          } else if (!isNaN(weight) && weight === 0) {
+            // Zero weight — reset stable state (item removed)
+            if (stableWeightRef.current) {
+              setStableWeight(null);
+              readingsBuffer.current = [];
+              lastSentWeight.current = null;
+              lastChangedTime.current = Date.now();
             }
           }
         }
@@ -234,6 +260,8 @@ export function useScaleConnection() {
   const resetForNextSale = useCallback(() => {
     setStableWeight(null);
     lastSentWeight.current = null;
+    lastReadingRef.current = null;
+    lastChangedTime.current = Date.now();
     readingsBuffer.current = [];
     if (scaleState === 'STABLE') setScaleState('CONNECTED');
   }, [scaleState]);
