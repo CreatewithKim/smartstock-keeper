@@ -29,7 +29,7 @@ export function LiveWeightDisplay({
   const isStable = scaleState === 'STABLE';
   const isWeighing = scaleState === 'WEIGHING';
   const isDisconnected = scaleState === 'DISCONNECTED';
-  const canCompleteSale = isStable && !completeSaleDisabled && !isProcessing;
+  const canCompleteSale = !isDisconnected && !isProcessing && (currentWeight?.weight ?? 0) > 0;
 
   return (
     <GlassCard 
