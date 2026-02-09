@@ -26,8 +26,7 @@ const DEFAULT_CONFIG: ScaleConfig = {
   stopBits: 1,
 };
 
-const STOP_MOVING_MS = 800; // weight unchanged for 0.8s = locked
-const MOVEMENT_TOLERANCE = 0.005; // kg – ignore micro-jitter
+const STOP_MOVING_MS = 800; // display number unchanged for 0.8s = locked
 
 // ── Hook ────────────────────────────────────────────────────────────
 export function useScaleConnection() {
@@ -59,13 +58,15 @@ export function useScaleConnection() {
 
   // Called on each reading – if weight changed, reset the timer; otherwise let it count
   const handleWeightReading = useCallback((weight: number) => {
+    // Round to 3 decimal places – this is the number shown on screen
+    const displayNum = Math.round(weight * 1000) / 1000;
     const prev = lastReadingRef.current;
-    lastReadingRef.current = weight;
+    lastReadingRef.current = displayNum;
 
-    const moved = prev !== null && Math.abs(weight - prev) > MOVEMENT_TOLERANCE;
+    const numberChanged = prev !== null && prev !== displayNum;
 
-    if (moved) {
-      // Weight is moving – clear any pending lock, unlock if locked
+    if (numberChanged) {
+      // Displayed number changed – clear any pending lock, unlock if locked
       lastChangedTime.current = Date.now();
       if (lockTimerRef.current) {
         clearTimeout(lockTimerRef.current);
@@ -77,15 +78,14 @@ export function useScaleConnection() {
       }
     }
 
-    // If not already locked and weight > 0, schedule a lock
-    if (!stableWeightRef.current && weight > 0 && !lockTimerRef.current) {
+    // If not already locked and display number > 0, schedule a lock
+    if (!stableWeightRef.current && displayNum > 0 && !lockTimerRef.current) {
       lockTimerRef.current = setTimeout(() => {
         lockTimerRef.current = null;
         const current = lastReadingRef.current;
         if (current !== null && current > 0) {
-          const rounded = Math.round(current * 1000) / 1000;
           const data: WeightData = {
-            weight: rounded,
+            weight: current,
             stable: true,
             timestamp: new Date(),
           };
@@ -96,8 +96,8 @@ export function useScaleConnection() {
       }, STOP_MOVING_MS);
     }
 
-    // Zero weight – item removed, unlock
-    if (weight === 0 && stableWeightRef.current) {
+    // Zero on display – item removed, unlock
+    if (displayNum === 0 && stableWeightRef.current) {
       setStableWeight(null);
       setScaleState('WEIGHING');
       if (lockTimerRef.current) {
