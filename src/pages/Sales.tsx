@@ -304,12 +304,12 @@ export default function Sales() {
         </GlassCard>
       </div>
 
-      {/* Sales History */}
+      {/* Today's Sales */}
       <GlassCard>
-        <h2 className="text-xl font-semibold text-foreground mb-4">Sales History</h2>
-        {sales.length > 0 ? (
+        <h2 className="text-xl font-semibold text-foreground mb-4">Today's Sales</h2>
+        {todaySales.length > 0 ? (
           <div className="space-y-3">
-            {sales.map((sale) => (
+            {todaySales.map((sale) => (
               <div
                 key={sale.id}
                 className="flex items-center justify-between rounded-lg bg-primary/5 p-4"
@@ -352,12 +352,12 @@ export default function Sales() {
         )}
       </GlassCard>
 
-      {/* Excess Sales History */}
+      {/* Today's Excess Sales */}
       <GlassCard>
-        <h2 className="text-xl font-semibold text-foreground mb-4">Excess Sales</h2>
-        {excessSales.length > 0 ? (
+        <h2 className="text-xl font-semibold text-foreground mb-4">Today's Excess Sales</h2>
+        {todayExcessSales.length > 0 ? (
           <div className="space-y-3">
-            {excessSales.map((sale) => (
+            {todayExcessSales.map((sale) => (
               <div
                 key={sale.id}
                 className="flex items-center justify-between rounded-lg bg-amber-500/5 p-4"
