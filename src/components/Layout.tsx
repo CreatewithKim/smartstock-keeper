@@ -1,5 +1,5 @@
 import { ReactNode, useState } from "react";
-import { Package, LayoutDashboard, ShoppingCart, FileText, Settings, Menu, Wallet, Truck, Scale } from "lucide-react";
+import { Package, LayoutDashboard, ShoppingCart, FileText, Settings, Menu, Wallet, Truck, Scale, BarChart3 } from "lucide-react";
 import { NavLink } from "./NavLink";
 import { cn } from "@/lib/utils";
 import { Button } from "./ui/button";
@@ -16,6 +16,7 @@ const navItems = [
   { icon: ShoppingCart, label: "Sales", path: "/sales" },
   { icon: Wallet, label: "Avenues", path: "/avenues" },
   { icon: Scale, label: "Scale", path: "/scale" },
+  { icon: BarChart3, label: "Analytics", path: "/analytics" },
   { icon: FileText, label: "Reports", path: "/reports" },
   { icon: Settings, label: "Settings", path: "/settings" },
 ];
