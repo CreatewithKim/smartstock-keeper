@@ -271,24 +271,22 @@ export function useScaleConnection() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Checklist §6 "Cleanup" – close port on page unload ──────────
+  // ── Checklist §6 "Cleanup" – close port on page unload only ─────
   useEffect(() => {
-    const cleanup = async () => {
+    const cleanup = () => {
       runningRef.current = false;
       if (readerRef.current) {
-        try { await readerRef.current.cancel(); } catch { /* ignore */ }
+        try { readerRef.current.cancel(); } catch { /* ignore */ }
       }
       if (portRef.current) {
-        try { await portRef.current.close(); } catch { /* ignore */ }
+        try { portRef.current.close(); } catch { /* ignore */ }
       }
     };
 
     window.addEventListener('beforeunload', cleanup);
-
-    // Also clean up on unmount
     return () => {
       window.removeEventListener('beforeunload', cleanup);
-      cleanup();
+      // Do NOT close port on unmount – keep connection alive across tab switches
     };
   }, []);
 
