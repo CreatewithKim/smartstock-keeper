@@ -1,5 +1,12 @@
 import { useEffect, useState } from "react";
-import { ShoppingCart, Calendar, Plus, Pencil, Trash2 } from "lucide-react";
+import { ShoppingCart, CalendarIcon, Plus, Pencil, Trash2 } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Calendar } from "@/components/ui/calendar";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { GlassCard } from "@/components/GlassCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,6 +33,8 @@ export default function Sales() {
   const [isExcessDialogOpen, setIsExcessDialogOpen] = useState(false);
   const [editingExcess, setEditingExcess] = useState<ExcessSale | null>(null);
   const [loading, setLoading] = useState(true);
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [calendarOpen, setCalendarOpen] = useState(false);
 
   const [formData, setFormData] = useState({
     productId: "",
@@ -112,13 +121,18 @@ export default function Sales() {
     }
 
     try {
+      // Use selected date but with current time
+      const saleDate = new Date(selectedDate);
+      const now = new Date();
+      saleDate.setHours(now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds());
+
       const saleData = {
         productId: selectedProduct.id!,
         productName: selectedProduct.name,
         quantity,
         unitPrice: selectedProduct.sellingPrice,
         totalAmount,
-        date: new Date(),
+        date: saleDate,
         notes: formData.notes,
       };
 
@@ -226,20 +240,20 @@ export default function Sales() {
     }
   };
 
-  const todaySales = sales.filter((s) => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return s.date >= today;
-  });
+  const startOfSelected = new Date(selectedDate);
+  startOfSelected.setHours(0, 0, 0, 0);
+  const endOfSelected = new Date(startOfSelected);
+  endOfSelected.setDate(endOfSelected.getDate() + 1);
 
-  const todayExcessSales = excessSales.filter((s) => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return s.date >= today;
-  });
+  const filteredSales = sales.filter((s) => s.date >= startOfSelected && s.date < endOfSelected);
 
-  const todayTotal = todaySales.reduce((sum, sale) => sum + sale.totalAmount, 0);
-  const todayExcessTotal = todayExcessSales.reduce((sum, sale) => sum + sale.amount, 0);
+  const filteredExcessSales = excessSales.filter((s) => s.date >= startOfSelected && s.date < endOfSelected);
+
+  const dayTotal = filteredSales.reduce((sum, sale) => sum + sale.totalAmount, 0);
+  const dayExcessTotal = filteredExcessSales.reduce((sum, sale) => sum + sale.amount, 0);
+
+  const isToday = format(selectedDate, "yyyy-MM-dd") === format(new Date(), "yyyy-MM-dd");
+  const dateLabel = isToday ? "Today's" : format(selectedDate, "MMM dd, yyyy");
 
   if (loading) {
     return (
@@ -254,12 +268,35 @@ export default function Sales() {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-4xl font-bold text-foreground mb-2">Sales</h1>
-          <p className="text-muted-foreground">Record and track your daily sales</p>
+          <p className="text-muted-foreground">Record and track your sales</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2 items-center">
+          <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+            <PopoverTrigger asChild>
+              <Button variant="outline" className={cn("gap-2", !isToday && "border-primary text-primary")}>
+                <CalendarIcon className="h-4 w-4" />
+                {isToday ? "Today" : format(selectedDate, "MMM dd, yyyy")}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="end">
+              <Calendar
+                mode="single"
+                selected={selectedDate}
+                onSelect={(date) => {
+                  if (date) {
+                    setSelectedDate(date);
+                    setCalendarOpen(false);
+                  }
+                }}
+                disabled={(date) => date > new Date()}
+                initialFocus
+                className={cn("p-3 pointer-events-auto")}
+              />
+            </PopoverContent>
+          </Popover>
           <Button onClick={() => setIsExcessDialogOpen(true)} variant="outline" className="gap-2">
             <Plus className="h-4 w-4" />
             Record Excess
@@ -271,17 +308,17 @@ export default function Sales() {
         </div>
       </div>
 
-      {/* Today's Summary */}
+      {/* Summary */}
       <div className="grid gap-4 md:grid-cols-2">
         <GlassCard className="border-primary/20">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-muted-foreground mb-1">Today's Product Sales</p>
+              <p className="text-sm text-muted-foreground mb-1">{dateLabel} Product Sales</p>
               <p className="text-3xl font-bold text-primary">
-                KSh {todayTotal.toLocaleString()}
+                KSh {dayTotal.toLocaleString()}
               </p>
               <p className="text-sm text-muted-foreground mt-1">
-                {todaySales.length} transaction{todaySales.length !== 1 ? "s" : ""}
+                {filteredSales.length} transaction{filteredSales.length !== 1 ? "s" : ""}
               </p>
             </div>
             <ShoppingCart className="h-12 w-12 text-primary/30" />
@@ -291,12 +328,12 @@ export default function Sales() {
         <GlassCard className="border-amber-500/20">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-muted-foreground mb-1">Today's Excess Sales</p>
+              <p className="text-sm text-muted-foreground mb-1">{dateLabel} Excess Sales</p>
               <p className="text-3xl font-bold text-amber-500">
-                KSh {todayExcessTotal.toLocaleString()}
+                KSh {dayExcessTotal.toLocaleString()}
               </p>
               <p className="text-sm text-muted-foreground mt-1">
-                {todayExcessSales.length} record{todayExcessSales.length !== 1 ? "s" : ""}
+                {filteredExcessSales.length} record{filteredExcessSales.length !== 1 ? "s" : ""}
               </p>
             </div>
             <Plus className="h-12 w-12 text-amber-500/30" />
@@ -304,12 +341,12 @@ export default function Sales() {
         </GlassCard>
       </div>
 
-      {/* Today's Sales */}
+      {/* Sales List */}
       <GlassCard>
-        <h2 className="text-xl font-semibold text-foreground mb-4">Today's Sales</h2>
-        {todaySales.length > 0 ? (
+        <h2 className="text-xl font-semibold text-foreground mb-4">{dateLabel} Sales</h2>
+        {filteredSales.length > 0 ? (
           <div className="space-y-3">
-            {todaySales.map((sale) => (
+            {filteredSales.map((sale) => (
               <div
                 key={sale.id}
                 className="flex items-center justify-between rounded-lg bg-primary/5 p-4"
@@ -352,12 +389,12 @@ export default function Sales() {
         )}
       </GlassCard>
 
-      {/* Today's Excess Sales */}
+      {/* Excess Sales */}
       <GlassCard>
-        <h2 className="text-xl font-semibold text-foreground mb-4">Today's Excess Sales</h2>
-        {todayExcessSales.length > 0 ? (
+        <h2 className="text-xl font-semibold text-foreground mb-4">{dateLabel} Excess Sales</h2>
+        {filteredExcessSales.length > 0 ? (
           <div className="space-y-3">
-            {todayExcessSales.map((sale) => (
+            {filteredExcessSales.map((sale) => (
               <div
                 key={sale.id}
                 className="flex items-center justify-between rounded-lg bg-amber-500/5 p-4"
