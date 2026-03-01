@@ -13,6 +13,7 @@ import Reports from "./pages/Reports";
 import Settings from "./pages/Settings";
 import ScaleIntegration from "./pages/ScaleIntegration";
 import Analytics from "./pages/Analytics";
+import Expenses from "./pages/Expenses";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -34,6 +35,7 @@ const App = () => {
             <Route path="/settings" element={<Layout><Settings /></Layout>} />
             <Route path="/scale" element={<Layout><ScaleIntegration /></Layout>} />
             <Route path="/analytics" element={<Layout><Analytics /></Layout>} />
+            <Route path="/expenses" element={<Layout><Expenses /></Layout>} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

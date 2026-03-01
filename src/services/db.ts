@@ -52,6 +52,16 @@ export interface ProductOut {
   notes?: string;
 }
 
+export interface Expense {
+  id?: number;
+  description: string;
+  category: string;
+  amount: number;
+  date: Date;
+  notes?: string;
+  createdAt: Date;
+}
+
 interface SmartStockDB extends DBSchema {
   products: {
     key: number;
@@ -78,6 +88,11 @@ interface SmartStockDB extends DBSchema {
     value: ProductOut;
     indexes: { 'by-product': number; 'by-date': Date; 'by-destination': string };
   };
+  expenses: {
+    key: number;
+    value: Expense;
+    indexes: { 'by-date': Date; 'by-category': string };
+  };
 }
 
 let dbInstance: IDBPDatabase<SmartStockDB> | null = null;
@@ -85,7 +100,7 @@ let dbInstance: IDBPDatabase<SmartStockDB> | null = null;
 async function getDB() {
   if (dbInstance) return dbInstance;
 
-  dbInstance = await openDB<SmartStockDB>('smartstock-db', 3, {
+  dbInstance = await openDB<SmartStockDB>('smartstock-db', 4, {
     upgrade(db, oldVersion) {
       // Products store
       if (!db.objectStoreNames.contains('products')) {
@@ -134,6 +149,16 @@ async function getDB() {
         productsOutStore.createIndex('by-product', 'productId');
         productsOutStore.createIndex('by-date', 'date');
         productsOutStore.createIndex('by-destination', 'destination');
+      }
+
+      // Expenses store (added in version 4)
+      if (!db.objectStoreNames.contains('expenses')) {
+        const expensesStore = db.createObjectStore('expenses', {
+          keyPath: 'id',
+          autoIncrement: true,
+        });
+        expensesStore.createIndex('by-date', 'date');
+        expensesStore.createIndex('by-category', 'category');
       }
     },
   });
@@ -392,6 +417,54 @@ export const productOutDB = {
     tomorrow.setDate(tomorrow.getDate() + 1);
     
     return this.getByDateRange(today, tomorrow);
+  },
+};
+
+// Expense operations
+export const expenseDB = {
+  async getAll(): Promise<Expense[]> {
+    const db = await getDB();
+    return db.getAll('expenses');
+  },
+
+  async getById(id: number): Promise<Expense | undefined> {
+    const db = await getDB();
+    return db.get('expenses', id);
+  },
+
+  async add(expense: Omit<Expense, 'id'>): Promise<number> {
+    const db = await getDB();
+    return db.add('expenses', expense as Expense);
+  },
+
+  async update(expense: Expense): Promise<void> {
+    const db = await getDB();
+    await db.put('expenses', expense);
+  },
+
+  async delete(id: number): Promise<void> {
+    const db = await getDB();
+    await db.delete('expenses', id);
+  },
+
+  async getByDateRange(startDate: Date, endDate: Date): Promise<Expense[]> {
+    const db = await getDB();
+    const expenses = await db.getAll('expenses');
+    return expenses.filter(e => e.date >= startDate && e.date <= endDate);
+  },
+
+  async getByCategory(category: string): Promise<Expense[]> {
+    const db = await getDB();
+    return db.getAllFromIndex('expenses', 'by-category', category);
+  },
+
+  async getDailyTotal(date: Date = new Date()): Promise<number> {
+    const startOfDay = new Date(date);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(startOfDay);
+    endOfDay.setDate(endOfDay.getDate() + 1);
+    const expenses = await this.getByDateRange(startOfDay, endOfDay);
+    return expenses.reduce((sum, e) => sum + e.amount, 0);
   },
 };
 
