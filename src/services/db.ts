@@ -1,4 +1,5 @@
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
+import { normalizeDates, getDayRange, isDateInRange } from './dateUtils';
 
 export interface Product {
   id?: number;
@@ -170,7 +171,8 @@ async function getDB() {
 export const productDB = {
   async getAll(): Promise<Product[]> {
     const db = await getDB();
-    return db.getAll('products');
+    const products = await db.getAll('products');
+    return products.map(p => normalizeDates(p, ['createdAt', 'updatedAt']));
   },
 
   async getById(id: number): Promise<Product | undefined> {
@@ -216,7 +218,8 @@ export const productDB = {
 export const stockIntakeDB = {
   async getAll(): Promise<StockIntake[]> {
     const db = await getDB();
-    return db.getAll('stockIntakes');
+    const intakes = await db.getAll('stockIntakes');
+    return intakes.map(i => normalizeDates(i, ['date']));
   },
 
   async getByProduct(productId: number): Promise<StockIntake[]> {
@@ -245,7 +248,8 @@ export const stockIntakeDB = {
 export const salesDB = {
   async getAll(): Promise<Sale[]> {
     const db = await getDB();
-    return db.getAll('sales');
+    const sales = await db.getAll('sales');
+    return sales.map(s => normalizeDates(s, ['date']));
   },
 
   async getByProduct(productId: number): Promise<Sale[]> {
@@ -274,28 +278,19 @@ export const salesDB = {
   },
 
   async getByDateRange(startDate: Date, endDate: Date): Promise<Sale[]> {
-    const db = await getDB();
-    const sales = await db.getAll('sales');
-    return sales.filter(s => s.date >= startDate && s.date <= endDate);
+    const all = await this.getAll();
+    return all.filter(s => isDateInRange(s.date, startDate, endDate));
   },
 
   async getTodaySales(): Promise<Sale[]> {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    
-    return this.getByDateRange(today, tomorrow);
+    const { start, end } = getDayRange(new Date());
+    return this.getByDateRange(start, end);
   },
 
   async getDailySalesTotal(date: Date = new Date()): Promise<number> {
-    const startOfDay = new Date(date);
-    startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date(startOfDay);
-    endOfDay.setDate(endOfDay.getDate() + 1);
-    
-    const sales = await this.getByDateRange(startOfDay, endOfDay);
-    return sales.reduce((sum, sale) => sum + sale.totalAmount, 0);
+    const { start, end } = getDayRange(date);
+    const sales = await this.getByDateRange(start, end);
+    return sales.reduce((sum, sale) => sum + (sale.totalAmount || 0), 0);
   },
 };
 
@@ -303,7 +298,8 @@ export const salesDB = {
 export const excessSalesDB = {
   async getAll(): Promise<ExcessSale[]> {
     const db = await getDB();
-    return db.getAll('excessSales');
+    const items = await db.getAll('excessSales');
+    return items.map(i => normalizeDates(i, ['date']));
   },
 
   async getById(id: number): Promise<ExcessSale | undefined> {
@@ -327,28 +323,19 @@ export const excessSalesDB = {
   },
 
   async getByDateRange(startDate: Date, endDate: Date): Promise<ExcessSale[]> {
-    const db = await getDB();
-    const excessSales = await db.getAll('excessSales');
-    return excessSales.filter(s => s.date >= startDate && s.date <= endDate);
+    const all = await this.getAll();
+    return all.filter(s => isDateInRange(s.date, startDate, endDate));
   },
 
   async getTodayExcessSales(): Promise<ExcessSale[]> {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    
-    return this.getByDateRange(today, tomorrow);
+    const { start, end } = getDayRange(new Date());
+    return this.getByDateRange(start, end);
   },
 
   async getDailyExcessTotal(date: Date = new Date()): Promise<number> {
-    const startOfDay = new Date(date);
-    startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date(startOfDay);
-    endOfDay.setDate(endOfDay.getDate() + 1);
-    
-    const excessSales = await this.getByDateRange(startOfDay, endOfDay);
-    return excessSales.reduce((sum, sale) => sum + sale.amount, 0);
+    const { start, end } = getDayRange(date);
+    const excessSales = await this.getByDateRange(start, end);
+    return excessSales.reduce((sum, sale) => sum + (sale.amount || 0), 0);
   },
 };
 
@@ -356,7 +343,8 @@ export const excessSalesDB = {
 export const productOutDB = {
   async getAll(): Promise<ProductOut[]> {
     const db = await getDB();
-    return db.getAll('productsOut');
+    const items = await db.getAll('productsOut');
+    return items.map(i => normalizeDates(i, ['date']));
   },
 
   async getById(id: number): Promise<ProductOut | undefined> {
@@ -400,9 +388,8 @@ export const productOutDB = {
   },
 
   async getByDateRange(startDate: Date, endDate: Date): Promise<ProductOut[]> {
-    const db = await getDB();
-    const productsOut = await db.getAll('productsOut');
-    return productsOut.filter(p => p.date >= startDate && p.date <= endDate);
+    const all = await this.getAll();
+    return all.filter(p => isDateInRange(p.date, startDate, endDate));
   },
 
   async getByDestination(destination: string): Promise<ProductOut[]> {
@@ -411,12 +398,8 @@ export const productOutDB = {
   },
 
   async getTodayProductsOut(): Promise<ProductOut[]> {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    
-    return this.getByDateRange(today, tomorrow);
+    const { start, end } = getDayRange(new Date());
+    return this.getByDateRange(start, end);
   },
 };
 
@@ -424,7 +407,8 @@ export const productOutDB = {
 export const expenseDB = {
   async getAll(): Promise<Expense[]> {
     const db = await getDB();
-    return db.getAll('expenses');
+    const items = await db.getAll('expenses');
+    return items.map(i => normalizeDates(i, ['date', 'createdAt']));
   },
 
   async getById(id: number): Promise<Expense | undefined> {
@@ -448,9 +432,8 @@ export const expenseDB = {
   },
 
   async getByDateRange(startDate: Date, endDate: Date): Promise<Expense[]> {
-    const db = await getDB();
-    const expenses = await db.getAll('expenses');
-    return expenses.filter(e => e.date >= startDate && e.date <= endDate);
+    const all = await this.getAll();
+    return all.filter(e => isDateInRange(e.date, startDate, endDate));
   },
 
   async getByCategory(category: string): Promise<Expense[]> {
@@ -459,12 +442,9 @@ export const expenseDB = {
   },
 
   async getDailyTotal(date: Date = new Date()): Promise<number> {
-    const startOfDay = new Date(date);
-    startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date(startOfDay);
-    endOfDay.setDate(endOfDay.getDate() + 1);
-    const expenses = await this.getByDateRange(startOfDay, endOfDay);
-    return expenses.reduce((sum, e) => sum + e.amount, 0);
+    const { start, end } = getDayRange(date);
+    const expenses = await this.getByDateRange(start, end);
+    return expenses.reduce((sum, e) => sum + (e.amount || 0), 0);
   },
 };
 
