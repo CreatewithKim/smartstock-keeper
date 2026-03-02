@@ -34,6 +34,7 @@ import {
 import { Calendar } from "@/components/ui/calendar";
 import { useToast } from "@/hooks/use-toast";
 import { expenseDB, Expense } from "@/services/db";
+import { ensureDate, getDayRange, isDateInRange } from "@/services/dateUtils";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 
@@ -74,7 +75,7 @@ export default function Expenses() {
   const loadData = async () => {
     try {
       const data = await expenseDB.getAll();
-      setExpenses(data.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+      setExpenses(data.sort((a, b) => ensureDate(b.date).getTime() - ensureDate(a.date).getTime()));
     } catch (error) {
       console.error("Error loading expenses:", error);
       toast({
@@ -172,25 +173,21 @@ export default function Expenses() {
     }
   };
 
-  // Filter by selected date
-  const startOfSelected = new Date(selectedDate);
-  startOfSelected.setHours(0, 0, 0, 0);
-  const endOfSelected = new Date(startOfSelected);
-  endOfSelected.setDate(endOfSelected.getDate() + 1);
+  const { start: startOfSelected, end: endOfSelected } = getDayRange(selectedDate);
 
   const filteredExpenses = expenses.filter(
-    (e) => new Date(e.date) >= startOfSelected && new Date(e.date) < endOfSelected
+    (e) => isDateInRange(e.date, startOfSelected, endOfSelected)
   );
 
-  const dayTotal = filteredExpenses.reduce((sum, e) => sum + e.amount, 0);
+  const dayTotal = filteredExpenses.reduce((sum, e) => sum + (e.amount || 0), 0);
 
   // Monthly total (same month as selected date)
   const monthStart = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
-  const monthEnd = new Date(selectedDate.getFullYear(), selectedDate.getMonth() + 1, 0, 23, 59, 59);
+  const monthEnd = new Date(selectedDate.getFullYear(), selectedDate.getMonth() + 1, 1);
   const monthlyExpenses = expenses.filter(
-    (e) => new Date(e.date) >= monthStart && new Date(e.date) <= monthEnd
+    (e) => isDateInRange(e.date, monthStart, monthEnd)
   );
-  const monthTotal = monthlyExpenses.reduce((sum, e) => sum + e.amount, 0);
+  const monthTotal = monthlyExpenses.reduce((sum, e) => sum + (e.amount || 0), 0);
 
   // Category breakdown for the month
   const categoryTotals = monthlyExpenses.reduce((acc, e) => {

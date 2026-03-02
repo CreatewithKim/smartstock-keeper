@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { ShoppingCart, CalendarIcon, Plus, Pencil, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Calendar } from "@/components/ui/calendar";
@@ -11,6 +11,7 @@ import { GlassCard } from "@/components/GlassCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { productDB, salesDB, excessSalesDB, Product, Sale, ExcessSale } from "@/services/db";
+import { ensureDate, getDayRange, isDateInRange } from "@/services/dateUtils";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
@@ -62,8 +63,8 @@ export default function Sales() {
         excessSalesDB.getAll(),
       ]);
       setProducts(productsData);
-      setSales(salesData.sort((a, b) => b.date.getTime() - a.date.getTime()));
-      setExcessSales(excessSalesData.sort((a, b) => b.date.getTime() - a.date.getTime()));
+      setSales(salesData.sort((a, b) => ensureDate(b.date).getTime() - ensureDate(a.date).getTime()));
+      setExcessSales(excessSalesData.sort((a, b) => ensureDate(b.date).getTime() - ensureDate(a.date).getTime()));
     } catch (error) {
       console.error("Error loading data:", error);
       toast({
@@ -240,17 +241,13 @@ export default function Sales() {
     }
   };
 
-  const startOfSelected = new Date(selectedDate);
-  startOfSelected.setHours(0, 0, 0, 0);
-  const endOfSelected = new Date(startOfSelected);
-  endOfSelected.setDate(endOfSelected.getDate() + 1);
+  const { start: startOfSelected, end: endOfSelected } = getDayRange(selectedDate);
 
-  const filteredSales = sales.filter((s) => s.date >= startOfSelected && s.date < endOfSelected);
+  const filteredSales = sales.filter((s) => isDateInRange(s.date, startOfSelected, endOfSelected));
+  const filteredExcessSales = excessSales.filter((s) => isDateInRange(s.date, startOfSelected, endOfSelected));
 
-  const filteredExcessSales = excessSales.filter((s) => s.date >= startOfSelected && s.date < endOfSelected);
-
-  const dayTotal = filteredSales.reduce((sum, sale) => sum + sale.totalAmount, 0);
-  const dayExcessTotal = filteredExcessSales.reduce((sum, sale) => sum + sale.amount, 0);
+  const dayTotal = filteredSales.reduce((sum, sale) => sum + (sale.totalAmount || 0), 0);
+  const dayExcessTotal = filteredExcessSales.reduce((sum, sale) => sum + (sale.amount || 0), 0);
 
   const isToday = format(selectedDate, "yyyy-MM-dd") === format(new Date(), "yyyy-MM-dd");
   const dateLabel = isToday ? "Today's" : format(selectedDate, "MMM dd, yyyy");
