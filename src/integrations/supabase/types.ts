@@ -14,16 +14,261 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      excess_sales: {
+        Row: {
+          amount: number
+          date: string
+          id: number
+          local_id: number | null
+          notes: string | null
+          synced_at: string
+        }
+        Insert: {
+          amount?: number
+          date?: string
+          id?: number
+          local_id?: number | null
+          notes?: string | null
+          synced_at?: string
+        }
+        Update: {
+          amount?: number
+          date?: string
+          id?: number
+          local_id?: number | null
+          notes?: string | null
+          synced_at?: string
+        }
+        Relationships: []
+      }
+      expenses: {
+        Row: {
+          amount: number
+          category: string
+          created_at: string
+          date: string
+          description: string
+          id: number
+          local_id: number | null
+          notes: string | null
+          synced_at: string
+        }
+        Insert: {
+          amount?: number
+          category?: string
+          created_at?: string
+          date?: string
+          description: string
+          id?: number
+          local_id?: number | null
+          notes?: string | null
+          synced_at?: string
+        }
+        Update: {
+          amount?: number
+          category?: string
+          created_at?: string
+          date?: string
+          description?: string
+          id?: number
+          local_id?: number | null
+          notes?: string | null
+          synced_at?: string
+        }
+        Relationships: []
+      }
+      products: {
+        Row: {
+          category: string
+          created_at: string
+          current_stock: number
+          id: number
+          initial_stock: number
+          local_id: number | null
+          low_stock_threshold: number
+          name: string
+          quantity_kg: number
+          selling_price: number
+          synced_at: string
+          updated_at: string
+        }
+        Insert: {
+          category?: string
+          created_at?: string
+          current_stock?: number
+          id?: number
+          initial_stock?: number
+          local_id?: number | null
+          low_stock_threshold?: number
+          name: string
+          quantity_kg?: number
+          selling_price?: number
+          synced_at?: string
+          updated_at?: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          current_stock?: number
+          id?: number
+          initial_stock?: number
+          local_id?: number | null
+          low_stock_threshold?: number
+          name?: string
+          quantity_kg?: number
+          selling_price?: number
+          synced_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      products_out: {
+        Row: {
+          date: string
+          destination: string
+          id: number
+          local_id: number | null
+          notes: string | null
+          product_id: number
+          product_name: string
+          quantity: number
+          synced_at: string
+        }
+        Insert: {
+          date?: string
+          destination?: string
+          id?: number
+          local_id?: number | null
+          notes?: string | null
+          product_id: number
+          product_name: string
+          quantity?: number
+          synced_at?: string
+        }
+        Update: {
+          date?: string
+          destination?: string
+          id?: number
+          local_id?: number | null
+          notes?: string | null
+          product_id?: number
+          product_name?: string
+          quantity?: number
+          synced_at?: string
+        }
+        Relationships: []
+      }
+      sales: {
+        Row: {
+          date: string
+          id: number
+          local_id: number | null
+          notes: string | null
+          product_id: number
+          product_name: string
+          quantity: number
+          synced_at: string
+          total_amount: number
+          unit_price: number
+        }
+        Insert: {
+          date?: string
+          id?: number
+          local_id?: number | null
+          notes?: string | null
+          product_id: number
+          product_name: string
+          quantity?: number
+          synced_at?: string
+          total_amount?: number
+          unit_price?: number
+        }
+        Update: {
+          date?: string
+          id?: number
+          local_id?: number | null
+          notes?: string | null
+          product_id?: number
+          product_name?: string
+          quantity?: number
+          synced_at?: string
+          total_amount?: number
+          unit_price?: number
+        }
+        Relationships: []
+      }
+      stock_intakes: {
+        Row: {
+          date: string
+          id: number
+          is_paid: boolean
+          local_id: number | null
+          notes: string | null
+          product_id: number
+          product_name: string
+          quantity: number
+          synced_at: string
+          vendor_name: string | null
+        }
+        Insert: {
+          date?: string
+          id?: number
+          is_paid?: boolean
+          local_id?: number | null
+          notes?: string | null
+          product_id: number
+          product_name: string
+          quantity?: number
+          synced_at?: string
+          vendor_name?: string | null
+        }
+        Update: {
+          date?: string
+          id?: number
+          is_paid?: boolean
+          local_id?: number | null
+          notes?: string | null
+          product_id?: number
+          product_name?: string
+          quantity?: number
+          synced_at?: string
+          vendor_name?: string | null
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "user"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +395,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "user"],
+    },
   },
 } as const
