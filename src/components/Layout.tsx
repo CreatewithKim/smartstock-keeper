@@ -1,5 +1,5 @@
 import { ReactNode, useState } from "react";
-import { Package, LayoutDashboard, ShoppingCart, FileText, Settings, Menu, Wallet, Truck, Scale, BarChart3, Receipt } from "lucide-react";
+import { Package, LayoutDashboard, ShoppingCart, FileText, Settings, Menu, Wallet, Truck, Scale, BarChart3, Receipt, Shield } from "lucide-react";
 import { NavLink } from "./NavLink";
 import { cn } from "@/lib/utils";
 import { Button } from "./ui/button";
@@ -84,6 +84,18 @@ export const Layout = ({ children }: LayoutProps) => {
                 </NavLink>
               ))}
             </nav>
+
+            <div className="mt-6 border-t border-border pt-4">
+              <NavLink
+                to="/admin/login"
+                className="flex items-center gap-3 rounded-xl px-4 py-3 text-foreground/70 transition-all hover:bg-primary/10 hover:text-primary"
+                activeClassName="bg-primary/20 text-primary font-semibold"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                <Shield className="h-5 w-5" />
+                <span>Admin Panel</span>
+              </NavLink>
+            </div>
           </div>
         </aside>
 
