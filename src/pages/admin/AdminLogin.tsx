@@ -14,7 +14,7 @@ const AdminLogin = () => {
   const [loading, setLoading] = useState(false);
   const [isSignUp, setIsSignUp] = useState(false);
   const [signUpSuccess, setSignUpSuccess] = useState(false);
-  const [emailConfirmed, setEmailConfirmed] = useState(false);
+  const [_emailConfirmed, setEmailConfirmed] = useState(false);
   const [awaitingRole, setAwaitingRole] = useState(false);
   const [confirmedEmail, setConfirmedEmail] = useState("");
   const navigate = useNavigate();
