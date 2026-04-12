@@ -1,9 +1,10 @@
 import { ReactNode, useState } from "react";
-import { Package, LayoutDashboard, ShoppingCart, FileText, Settings, Menu, Wallet, Truck, Scale, BarChart3, Receipt } from "lucide-react";
+import { Package, LayoutDashboard, ShoppingCart, FileText, Settings, Menu, Wallet, Truck, Scale, BarChart3, Receipt, LogOut } from "lucide-react";
 import { NavLink } from "./NavLink";
 import { cn } from "@/lib/utils";
 import { Button } from "./ui/button";
 import { PWAStatus } from "./PWAStatus";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface LayoutProps {
   children: ReactNode;
@@ -24,6 +25,7 @@ const navItems = [
 
 export const Layout = ({ children }: LayoutProps) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const { signOut, user } = useAuth();
 
   return (
     <div className="min-h-screen w-full">
@@ -84,6 +86,17 @@ export const Layout = ({ children }: LayoutProps) => {
                 </NavLink>
               ))}
             </nav>
+
+            <div className="mt-4 pt-4 border-t border-border">
+              <p className="text-xs text-muted-foreground truncate mb-2 px-4">{user?.email}</p>
+              <button
+                onClick={signOut}
+                className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-foreground/70 transition-all hover:bg-destructive/10 hover:text-destructive"
+              >
+                <LogOut className="h-5 w-5" />
+                <span>Sign Out</span>
+              </button>
+            </div>
           </div>
         </aside>
 
