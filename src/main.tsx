@@ -2,10 +2,6 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
-import { initAutoSync } from "./services/syncService";
-
-// Initialize auto-sync: pushes IndexedDB data to cloud when online
-initAutoSync();
 
 // PWA service worker
 // In development, unregister any existing service worker to avoid caching Vite modules,
