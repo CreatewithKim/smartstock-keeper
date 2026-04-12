@@ -16,6 +16,7 @@ import ScaleIntegration from "./pages/ScaleIntegration";
 import Analytics from "./pages/Analytics";
 import Expenses from "./pages/Expenses";
 import Auth from "./pages/Auth";
+import ResetPassword from "./pages/ResetPassword";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
