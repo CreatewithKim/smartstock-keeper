@@ -25,6 +25,7 @@ const navItems = [
 
 export const Layout = ({ children }: LayoutProps) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const { signOut, user } = useAuth();
 
   return (
     <div className="min-h-screen w-full">
