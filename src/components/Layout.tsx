@@ -86,6 +86,17 @@ export const Layout = ({ children }: LayoutProps) => {
                 </NavLink>
               ))}
             </nav>
+
+            <div className="mt-4 pt-4 border-t border-border">
+              <p className="text-xs text-muted-foreground truncate mb-2 px-4">{user?.email}</p>
+              <button
+                onClick={signOut}
+                className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-foreground/70 transition-all hover:bg-destructive/10 hover:text-destructive"
+              >
+                <LogOut className="h-5 w-5" />
+                <span>Sign Out</span>
+              </button>
+            </div>
           </div>
         </aside>
 
