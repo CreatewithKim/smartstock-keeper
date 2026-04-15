@@ -274,7 +274,7 @@ export default function Settings() {
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
-              <Button onClick={handleUpdatePassword} disabled={isUpdating || newPassword.length < 6} variant="outline">
+              <Button onClick={handleUpdatePassword} disabled={isUpdating || newPassword.length < 6 || !currentPassword.trim()} variant="outline">
                 Update
               </Button>
             </div>
