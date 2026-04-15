@@ -1,7 +1,9 @@
 import { useState, useEffect } from "react";
 import { GlassCard } from "@/components/GlassCard";
 import { Button } from "@/components/ui/button";
-import { Database, Download, Trash2, Info, Scale } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Database, Download, Trash2, Info, Scale, UserCog, LogOut, Eye, EyeOff, Mail, Lock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
   AlertDialog,
@@ -16,6 +18,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { ScaleConfiguration } from "@/components/scale/ScaleConfiguration";
 import { ScaleConfig } from "@/hooks/useScaleConnection";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
 
 const DEFAULT_SCALE_CONFIG: ScaleConfig = {
   port: 'COM3',
