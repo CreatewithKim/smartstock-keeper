@@ -207,6 +207,30 @@ export default function Settings() {
             </div>
           </div>
 
+          {/* Current Password Confirmation */}
+          <div className="rounded-lg bg-muted/50 p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <Lock className="h-4 w-4 text-muted-foreground" />
+              <p className="font-medium text-foreground">Current Password</p>
+            </div>
+            <div className="relative">
+              <Input
+                type={showCurrentPassword ? "text" : "password"}
+                placeholder="Enter current password to confirm changes"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+              />
+              <button
+                type="button"
+                onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                {showCurrentPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+            <p className="text-xs text-muted-foreground">Required before changing your email or password.</p>
+          </div>
+
           {/* Change Email */}
           <div className="rounded-lg bg-primary/5 p-4 space-y-3">
             <div className="flex items-center gap-2">
@@ -221,7 +245,7 @@ export default function Settings() {
                 onChange={(e) => setNewEmail(e.target.value)}
                 className="flex-1"
               />
-              <Button onClick={handleUpdateEmail} disabled={isUpdating || !newEmail.trim()} variant="outline">
+              <Button onClick={handleUpdateEmail} disabled={isUpdating || !newEmail.trim() || !currentPassword.trim()} variant="outline">
                 Update
               </Button>
             </div>
