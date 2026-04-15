@@ -34,13 +34,40 @@ export default function Settings() {
   const [scaleConfig, setScaleConfig] = useState<ScaleConfig>(DEFAULT_SCALE_CONFIG);
   const [newEmail, setNewEmail] = useState("");
   const [newPassword, setNewPassword] = useState("");
+  const [currentPassword, setCurrentPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
+
+  const verifyCurrentPassword = async (): Promise<boolean> => {
+    if (!currentPassword.trim()) {
+      toast({
+        title: "Current Password Required",
+        description: "Please enter your current password to confirm changes.",
+        variant: "destructive",
+      });
+      return false;
+    }
+    const { error } = await supabase.auth.signInWithPassword({
+      email: user?.email || "",
+      password: currentPassword,
+    });
+    if (error) {
+      toast({
+        title: "Incorrect Password",
+        description: "The current password you entered is incorrect.",
+        variant: "destructive",
+      });
+      return false;
+    }
+    return true;
+  };
 
   const handleUpdateEmail = async () => {
     if (!newEmail.trim()) return;
     setIsUpdating(true);
     try {
+      if (!(await verifyCurrentPassword())) return;
       const { error } = await supabase.auth.updateUser({ email: newEmail });
       if (error) throw error;
       toast({
@@ -48,6 +75,7 @@ export default function Settings() {
         description: "Check both your old and new email inboxes to confirm the change.",
       });
       setNewEmail("");
+      setCurrentPassword("");
     } catch (error: any) {
       toast({
         title: "Error",
@@ -70,6 +98,7 @@ export default function Settings() {
     }
     setIsUpdating(true);
     try {
+      if (!(await verifyCurrentPassword())) return;
       const { error } = await supabase.auth.updateUser({ password: newPassword });
       if (error) throw error;
       toast({
@@ -77,6 +106,7 @@ export default function Settings() {
         description: "Your password has been changed successfully.",
       });
       setNewPassword("");
+      setCurrentPassword("");
     } catch (error: any) {
       toast({
         title: "Error",
@@ -177,6 +207,30 @@ export default function Settings() {
             </div>
           </div>
 
+          {/* Current Password Confirmation */}
+          <div className="rounded-lg bg-muted/50 p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <Lock className="h-4 w-4 text-muted-foreground" />
+              <p className="font-medium text-foreground">Current Password</p>
+            </div>
+            <div className="relative">
+              <Input
+                type={showCurrentPassword ? "text" : "password"}
+                placeholder="Enter current password to confirm changes"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+              />
+              <button
+                type="button"
+                onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                {showCurrentPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+            <p className="text-xs text-muted-foreground">Required before changing your email or password.</p>
+          </div>
+
           {/* Change Email */}
           <div className="rounded-lg bg-primary/5 p-4 space-y-3">
             <div className="flex items-center gap-2">
@@ -191,7 +245,7 @@ export default function Settings() {
                 onChange={(e) => setNewEmail(e.target.value)}
                 className="flex-1"
               />
-              <Button onClick={handleUpdateEmail} disabled={isUpdating || !newEmail.trim()} variant="outline">
+              <Button onClick={handleUpdateEmail} disabled={isUpdating || !newEmail.trim() || !currentPassword.trim()} variant="outline">
                 Update
               </Button>
             </div>
@@ -220,7 +274,7 @@ export default function Settings() {
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
-              <Button onClick={handleUpdatePassword} disabled={isUpdating || newPassword.length < 6} variant="outline">
+              <Button onClick={handleUpdatePassword} disabled={isUpdating || newPassword.length < 6 || !currentPassword.trim()} variant="outline">
                 Update
               </Button>
             </div>
