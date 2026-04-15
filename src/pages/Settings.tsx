@@ -39,10 +39,35 @@ export default function Settings() {
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
 
+  const verifyCurrentPassword = async (): Promise<boolean> => {
+    if (!currentPassword.trim()) {
+      toast({
+        title: "Current Password Required",
+        description: "Please enter your current password to confirm changes.",
+        variant: "destructive",
+      });
+      return false;
+    }
+    const { error } = await supabase.auth.signInWithPassword({
+      email: user?.email || "",
+      password: currentPassword,
+    });
+    if (error) {
+      toast({
+        title: "Incorrect Password",
+        description: "The current password you entered is incorrect.",
+        variant: "destructive",
+      });
+      return false;
+    }
+    return true;
+  };
+
   const handleUpdateEmail = async () => {
     if (!newEmail.trim()) return;
     setIsUpdating(true);
     try {
+      if (!(await verifyCurrentPassword())) return;
       const { error } = await supabase.auth.updateUser({ email: newEmail });
       if (error) throw error;
       toast({
@@ -50,6 +75,7 @@ export default function Settings() {
         description: "Check both your old and new email inboxes to confirm the change.",
       });
       setNewEmail("");
+      setCurrentPassword("");
     } catch (error: any) {
       toast({
         title: "Error",
@@ -72,6 +98,7 @@ export default function Settings() {
     }
     setIsUpdating(true);
     try {
+      if (!(await verifyCurrentPassword())) return;
       const { error } = await supabase.auth.updateUser({ password: newPassword });
       if (error) throw error;
       toast({
@@ -79,6 +106,7 @@ export default function Settings() {
         description: "Your password has been changed successfully.",
       });
       setNewPassword("");
+      setCurrentPassword("");
     } catch (error: any) {
       toast({
         title: "Error",
