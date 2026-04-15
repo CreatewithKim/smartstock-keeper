@@ -30,7 +30,67 @@ const DEFAULT_SCALE_CONFIG: ScaleConfig = {
 
 export default function Settings() {
   const { toast } = useToast();
+  const { user, signOut } = useAuth();
   const [scaleConfig, setScaleConfig] = useState<ScaleConfig>(DEFAULT_SCALE_CONFIG);
+  const [newEmail, setNewEmail] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
+
+  const handleUpdateEmail = async () => {
+    if (!newEmail.trim()) return;
+    setIsUpdating(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ email: newEmail });
+      if (error) throw error;
+      toast({
+        title: "Confirmation Sent",
+        description: "Check both your old and new email inboxes to confirm the change.",
+      });
+      setNewEmail("");
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update email",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleUpdatePassword = async () => {
+    if (!newPassword.trim() || newPassword.length < 6) {
+      toast({
+        title: "Invalid Password",
+        description: "Password must be at least 6 characters",
+        variant: "destructive",
+      });
+      return;
+    }
+    setIsUpdating(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) throw error;
+      toast({
+        title: "Password Updated",
+        description: "Your password has been changed successfully.",
+      });
+      setNewPassword("");
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update password",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleSwitchAccount = async () => {
+    await signOut();
+  };
 
   useEffect(() => {
     const saved = localStorage.getItem('scaleConfig');
