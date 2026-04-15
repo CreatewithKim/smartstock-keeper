@@ -231,6 +231,8 @@ export default function Settings() {
             <p className="text-xs text-muted-foreground">Required before changing your email or password.</p>
           </div>
 
+          {currentPassword.trim() && (
+>          <>
           {/* Change Email */}
           <div className="rounded-lg bg-primary/5 p-4 space-y-3">
             <div className="flex items-center gap-2">
