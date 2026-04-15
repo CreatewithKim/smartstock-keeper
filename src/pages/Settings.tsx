@@ -232,55 +232,57 @@ export default function Settings() {
           </div>
 
           {currentPassword.trim() && (
->          <>
-          {/* Change Email */}
-          <div className="rounded-lg bg-primary/5 p-4 space-y-3">
-            <div className="flex items-center gap-2">
-              <Mail className="h-4 w-4 text-primary" />
-              <p className="font-medium text-foreground">Change Email</p>
-            </div>
-            <div className="flex gap-2">
-              <Input
-                type="email"
-                placeholder="New email address"
-                value={newEmail}
-                onChange={(e) => setNewEmail(e.target.value)}
-                className="flex-1"
-              />
-              <Button onClick={handleUpdateEmail} disabled={isUpdating || !newEmail.trim() || !currentPassword.trim()} variant="outline">
-                Update
-              </Button>
-            </div>
-            <p className="text-xs text-muted-foreground">A confirmation link will be sent to both your current and new email.</p>
-          </div>
-
-          {/* Change Password */}
-          <div className="rounded-lg bg-primary/5 p-4 space-y-3">
-            <div className="flex items-center gap-2">
-              <Lock className="h-4 w-4 text-primary" />
-              <p className="font-medium text-foreground">Change Password</p>
-            </div>
-            <div className="flex gap-2">
-              <div className="relative flex-1">
-                <Input
-                  type={showPassword ? "text" : "password"}
-                  placeholder="New password (min 6 characters)"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
+            <>
+              {/* Change Email */}
+              <div className="rounded-lg bg-primary/5 p-4 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Mail className="h-4 w-4 text-primary" />
+                  <p className="font-medium text-foreground">Change Email</p>
+                </div>
+                <div className="flex gap-2">
+                  <Input
+                    type="email"
+                    placeholder="New email address"
+                    value={newEmail}
+                    onChange={(e) => setNewEmail(e.target.value)}
+                    className="flex-1"
+                  />
+                  <Button onClick={handleUpdateEmail} disabled={isUpdating || !newEmail.trim()} variant="outline">
+                    Update
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">A confirmation link will be sent to both your current and new email.</p>
               </div>
-              <Button onClick={handleUpdatePassword} disabled={isUpdating || newPassword.length < 6 || !currentPassword.trim()} variant="outline">
-                Update
-              </Button>
-            </div>
-          </div>
+
+              {/* Change Password */}
+              <div className="rounded-lg bg-primary/5 p-4 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Lock className="h-4 w-4 text-primary" />
+                  <p className="font-medium text-foreground">Change Password</p>
+                </div>
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Input
+                      type={showPassword ? "text" : "password"}
+                      placeholder="New password (min 6 characters)"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                  <Button onClick={handleUpdatePassword} disabled={isUpdating || newPassword.length < 6} variant="outline">
+                    Update
+                  </Button>
+                </div>
+              </div>
+            </>
+          )}
 
           {/* Switch Account */}
           <div className="flex items-center justify-between rounded-lg bg-muted/50 p-4">
