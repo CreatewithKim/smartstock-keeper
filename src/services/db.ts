@@ -198,7 +198,9 @@ export const productDB = {
 
   async add(product: Omit<Product, 'id'>): Promise<number> {
     const db = await getDB();
-    return db.add('products', product as Product);
+    const id = await db.add('products', product as Product);
+    kickSync();
+    return id;
   },
 
   async update(product: Product): Promise<void> {
