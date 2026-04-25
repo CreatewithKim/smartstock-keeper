@@ -441,7 +441,9 @@ export const expenseDB = {
 
   async add(expense: Omit<Expense, 'id'>): Promise<number> {
     const db = await getDB();
-    return db.add('expenses', expense as Expense);
+    const id = await db.add('expenses', expense as Expense);
+    kickSync();
+    return id;
   },
 
   async update(expense: Expense): Promise<void> {
