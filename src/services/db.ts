@@ -329,7 +329,9 @@ export const excessSalesDB = {
 
   async add(excessSale: Omit<ExcessSale, 'id'>): Promise<number> {
     const db = await getDB();
-    return db.add('excessSales', excessSale as ExcessSale);
+    const id = await db.add('excessSales', excessSale as ExcessSale);
+    kickSync();
+    return id;
   },
 
   async update(excessSale: ExcessSale): Promise<void> {
