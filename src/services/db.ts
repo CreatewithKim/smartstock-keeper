@@ -1,6 +1,22 @@
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
 import { normalizeDates, getDayRange, isDateInRange } from './dateUtils';
 
+// Best-effort push to cloud after a local write. Imported lazily to avoid
+// a circular import (syncService imports openDB from this file's DB name).
+function kickSync() {
+  if (typeof window === 'undefined') return;
+  import('./syncService').then(async ({ pushToCloud }) => {
+    try {
+      const { supabase } = await import('@/integrations/supabase/client');
+      const { data } = await supabase.auth.getSession();
+      const uid = data.session?.user?.id;
+      if (uid) await pushToCloud(uid);
+    } catch {
+      /* offline or signed out — periodic sync will catch up later */
+    }
+  }).catch(() => {});
+}
+
 export interface Product {
   id?: number;
   name: string;
