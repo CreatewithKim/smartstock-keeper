@@ -293,6 +293,7 @@ export const salesDB = {
     // Update product stock
     await productDB.updateStock(sale.productId, sale.quantity, false);
     
+    kickSync();
     return id;
   },
 
