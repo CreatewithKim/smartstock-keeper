@@ -252,6 +252,7 @@ export const stockIntakeDB = {
     // Update product stock
     await productDB.updateStock(intake.productId, intake.quantity, true);
     
+    kickSync();
     return id;
   },
 
