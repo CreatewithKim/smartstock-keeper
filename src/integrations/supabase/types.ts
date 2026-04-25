@@ -22,6 +22,7 @@ export type Database = {
           local_id: number | null
           notes: string | null
           synced_at: string
+          user_id: string
         }
         Insert: {
           amount?: number
@@ -30,6 +31,7 @@ export type Database = {
           local_id?: number | null
           notes?: string | null
           synced_at?: string
+          user_id: string
         }
         Update: {
           amount?: number
@@ -38,6 +40,7 @@ export type Database = {
           local_id?: number | null
           notes?: string | null
           synced_at?: string
+          user_id?: string
         }
         Relationships: []
       }
@@ -52,6 +55,7 @@ export type Database = {
           local_id: number | null
           notes: string | null
           synced_at: string
+          user_id: string
         }
         Insert: {
           amount?: number
@@ -63,6 +67,7 @@ export type Database = {
           local_id?: number | null
           notes?: string | null
           synced_at?: string
+          user_id: string
         }
         Update: {
           amount?: number
@@ -74,6 +79,7 @@ export type Database = {
           local_id?: number | null
           notes?: string | null
           synced_at?: string
+          user_id?: string
         }
         Relationships: []
       }
@@ -91,6 +97,7 @@ export type Database = {
           selling_price: number
           synced_at: string
           updated_at: string
+          user_id: string
         }
         Insert: {
           category?: string
@@ -105,6 +112,7 @@ export type Database = {
           selling_price?: number
           synced_at?: string
           updated_at?: string
+          user_id: string
         }
         Update: {
           category?: string
@@ -119,6 +127,7 @@ export type Database = {
           selling_price?: number
           synced_at?: string
           updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }
@@ -133,6 +142,7 @@ export type Database = {
           product_name: string
           quantity: number
           synced_at: string
+          user_id: string
         }
         Insert: {
           date?: string
@@ -144,6 +154,7 @@ export type Database = {
           product_name: string
           quantity?: number
           synced_at?: string
+          user_id: string
         }
         Update: {
           date?: string
@@ -155,6 +166,7 @@ export type Database = {
           product_name?: string
           quantity?: number
           synced_at?: string
+          user_id?: string
         }
         Relationships: []
       }
@@ -197,6 +209,7 @@ export type Database = {
           synced_at: string
           total_amount: number
           unit_price: number
+          user_id: string
         }
         Insert: {
           date?: string
@@ -209,6 +222,7 @@ export type Database = {
           synced_at?: string
           total_amount?: number
           unit_price?: number
+          user_id: string
         }
         Update: {
           date?: string
@@ -221,6 +235,7 @@ export type Database = {
           synced_at?: string
           total_amount?: number
           unit_price?: number
+          user_id?: string
         }
         Relationships: []
       }
@@ -235,6 +250,7 @@ export type Database = {
           product_name: string
           quantity: number
           synced_at: string
+          user_id: string
           vendor_name: string | null
         }
         Insert: {
@@ -247,6 +263,7 @@ export type Database = {
           product_name: string
           quantity?: number
           synced_at?: string
+          user_id: string
           vendor_name?: string | null
         }
         Update: {
@@ -259,6 +276,7 @@ export type Database = {
           product_name?: string
           quantity?: number
           synced_at?: string
+          user_id?: string
           vendor_name?: string | null
         }
         Relationships: []
