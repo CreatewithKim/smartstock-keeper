@@ -3,10 +3,23 @@ import { GlassCard } from "@/components/GlassCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Database, Download, Trash2, Info, Scale, UserCog, LogOut, Eye, EyeOff, Mail, Lock, CloudUpload, CheckCircle2, AlertCircle } from "lucide-react";
+import { Database, Download, Trash2, Info, Scale, UserCog, LogOut, Eye, EyeOff, Mail, Lock, CloudUpload, CheckCircle2, AlertCircle, Upload, FileUp } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { forceUploadAll, type ForceUploadResult } from "@/services/syncService";
+import {
+  importFromFile,
+  IMPORT_TYPE_LABELS,
+  type ImportDataType,
+  type ImportResult,
+} from "@/services/importService";
 import {
   AlertDialog,
   AlertDialogAction,
