@@ -63,6 +63,50 @@ export default function Settings() {
   } | null>(null);
   const [uploadResult, setUploadResult] = useState<ForceUploadResult | null>(null);
 
+  // File import state
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importType, setImportType] = useState<ImportDataType | 'auto'>('auto');
+  const [isImporting, setIsImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState<{ processed: number; total: number; type: string } | null>(null);
+  const [importResult, setImportResult] = useState<{ type: ImportDataType; result: ImportResult; rowCount: number } | null>(null);
+
+  const handleImportFile = async () => {
+    if (!importFile) return;
+    setIsImporting(true);
+    setImportResult(null);
+    setImportProgress({ processed: 0, total: 0, type: '' });
+    try {
+      const res = await importFromFile(
+        importFile,
+        importType === 'auto' ? undefined : importType,
+        (p) => setImportProgress({ processed: p.processed, total: p.total, type: IMPORT_TYPE_LABELS[p.type] }),
+      );
+      setImportResult(res);
+      const { result } = res;
+      if (result.failed === 0 && result.skipped === 0) {
+        toast({
+          title: "Import complete",
+          description: `Added ${result.inserted} ${IMPORT_TYPE_LABELS[res.type].toLowerCase()} record${result.inserted === 1 ? '' : 's'}.`,
+        });
+      } else {
+        toast({
+          title: "Import finished",
+          description: `${result.inserted} added, ${result.skipped} skipped, ${result.failed} failed.`,
+          variant: result.failed > 0 ? "destructive" : "default",
+        });
+      }
+    } catch (err: any) {
+      toast({
+        title: "Import failed",
+        description: err?.message || "Could not read or import the file.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsImporting(false);
+      setImportProgress(null);
+    }
+  };
+
   const handleForceUpload = async () => {
     if (!user?.id) return;
     if (!navigator.onLine) {
