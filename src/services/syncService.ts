@@ -216,7 +216,18 @@ export async function clearLocalData() {
   }
 }
 
-/** Pull all remote rows for the user and replace local stores with them. */
+/**
+ * Pull all remote rows for the user and merge them into local stores.
+ *
+ * IMPORTANT: We do NOT clear the store before inserting — that would wipe
+ * any locally-created rows that haven't been pushed yet (e.g. data created
+ * offline on this device before the user signed in). Instead we:
+ *   1. Build a set of existing remoteIds in the local store.
+ *   2. Remove local rows whose remoteId is NOT in the cloud anymore
+ *      (deleted on another device) — but keep rows that have no remoteId
+ *      (they're pending upload).
+ *   3. Upsert every cloud row by remoteId so cross-device data appears.
+ */
 export async function pullFromCloud(userId: string) {
   if (!navigator.onLine) return;
   const db = await openLocal();
@@ -234,18 +245,35 @@ export async function pullFromCloud(userId: string) {
     }
     if (!data) continue;
 
+    const remoteRows = data as any[];
+    const remoteIds = new Set(remoteRows.map((r) => Number(r.id)));
+
     const tx = db.transaction(store as any, 'readwrite');
     const objStore = tx.objectStore(store as any);
 
-    // Clear and re-insert. Safe because pull happens right after a wipe
-    // on login, or as a refresh of an already-synced state.
-    await objStore.clear();
-    for (const remoteRow of data as any[]) {
-      const localRow = remoteToLocal(store, remoteRow);
-      // Use remote id as local primary key for stability across devices.
-      (localRow as any).id = Number(remoteRow.id);
+    // Index existing local rows by remoteId so we can replace in place.
+    const existingLocal = await objStore.getAll();
+    const localByRemoteId = new Map<number, any>();
+    for (const row of existingLocal as any[]) {
+      if (row.remoteId != null) {
+        localByRemoteId.set(Number(row.remoteId), row);
+      }
+    }
+
+    // 1) Delete any previously-synced local rows that no longer exist remotely.
+    for (const row of existingLocal as any[]) {
+      if (row.remoteId != null && !remoteIds.has(Number(row.remoteId))) {
+        await objStore.delete(row.id);
+      }
+    }
+
+    // 2) Upsert every cloud row using remoteId as the stable local key.
+    for (const remoteRow of remoteRows) {
+      const localRow: any = remoteToLocal(store, remoteRow);
+      localRow.id = Number(remoteRow.id);
       await objStore.put(localRow);
     }
+
     await tx.done;
   }
 }
@@ -297,15 +325,19 @@ export async function startSync(userId: string) {
   }
   activeUserId = userId;
 
-  try {
-    await pullFromCloud(userId);
-  } catch (err) {
-    console.warn('[sync] initial pull failed', err);
-  }
+  // PUSH first so any local-only rows created on this device (offline,
+  // before login, etc.) reach the cloud before we merge in the remote
+  // copy. Otherwise a fresh login that pulls an empty cloud could mask
+  // unsynced local data.
   try {
     await pushToCloud(userId);
   } catch (err) {
     console.warn('[sync] initial push failed', err);
+  }
+  try {
+    await pullFromCloud(userId);
+  } catch (err) {
+    console.warn('[sync] initial pull failed', err);
   }
 
   if (intervalHandle) clearInterval(intervalHandle);
