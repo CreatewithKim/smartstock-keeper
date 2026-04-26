@@ -3,8 +3,10 @@ import { GlassCard } from "@/components/GlassCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Database, Download, Trash2, Info, Scale, UserCog, LogOut, Eye, EyeOff, Mail, Lock } from "lucide-react";
+import { Database, Download, Trash2, Info, Scale, UserCog, LogOut, Eye, EyeOff, Mail, Lock, CloudUpload, CheckCircle2, AlertCircle } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
+import { forceUploadAll, type ForceUploadResult } from "@/services/syncService";
 import {
   AlertDialog,
   AlertDialogAction,
