@@ -424,6 +424,94 @@ export default function Settings() {
           </div>
 
           <div className="space-y-3">
+            {/* Force Upload Local Data */}
+            <div className="rounded-lg bg-primary/5 p-4 space-y-3">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex-1">
+                  <p className="font-medium text-foreground">Force Upload Local Data</p>
+                  <p className="text-sm text-muted-foreground">
+                    Push every unsynced record on this device up to your account. Use this to recover data created before cloud sync was enabled.
+                  </p>
+                </div>
+                <Button
+                  onClick={handleForceUpload}
+                  disabled={isUploading}
+                  variant="outline"
+                  className="gap-2 shrink-0"
+                >
+                  <CloudUpload className="h-4 w-4" />
+                  {isUploading ? 'Uploading…' : 'Upload'}
+                </Button>
+              </div>
+
+              {isUploading && uploadProgress && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span>
+                      {uploadProgress.currentStore
+                        ? `Uploading ${uploadProgress.currentStore}…`
+                        : 'Preparing…'}
+                    </span>
+                    <span>
+                      {uploadProgress.storeUploaded} / {uploadProgress.storeTotal}
+                    </span>
+                  </div>
+                  <Progress
+                    value={
+                      uploadProgress.storeTotal > 0
+                        ? (uploadProgress.storeUploaded / uploadProgress.storeTotal) * 100
+                        : 0
+                    }
+                    className="h-2"
+                  />
+                </div>
+              )}
+
+              {!isUploading && uploadResult && (
+                <div className="rounded-md border border-border bg-background/40 p-3 space-y-2">
+                  <div className="flex items-center gap-2 text-sm">
+                    {uploadResult.failed === 0 ? (
+                      <CheckCircle2 className="h-4 w-4 text-primary" />
+                    ) : (
+                      <AlertCircle className="h-4 w-4 text-destructive" />
+                    )}
+                    <span className="font-medium text-foreground">
+                      {uploadResult.uploaded} uploaded
+                      {uploadResult.failed > 0 && `, ${uploadResult.failed} failed`}
+                      {uploadResult.totalUnsynced === 0 && ' — nothing to upload'}
+                    </span>
+                  </div>
+                  {Object.entries(uploadResult.byStore).some(([, s]) => s.total > 0) && (
+                    <ul className="text-xs text-muted-foreground space-y-1">
+                      {Object.entries(uploadResult.byStore)
+                        .filter(([, s]) => s.total > 0)
+                        .map(([store, s]) => (
+                          <li key={store} className="flex justify-between">
+                            <span className="capitalize">{store}</span>
+                            <span>
+                              {s.uploaded}/{s.total}
+                              {s.failed > 0 && ` (${s.failed} failed)`}
+                            </span>
+                          </li>
+                        ))}
+                    </ul>
+                  )}
+                  {uploadResult.errors.length > 0 && (
+                    <details className="text-xs text-muted-foreground">
+                      <summary className="cursor-pointer text-destructive">
+                        View {uploadResult.errors.length} error{uploadResult.errors.length === 1 ? '' : 's'}
+                      </summary>
+                      <ul className="mt-1 space-y-0.5 pl-3 list-disc">
+                        {uploadResult.errors.slice(0, 10).map((e, i) => (
+                          <li key={i}>{e}</li>
+                        ))}
+                      </ul>
+                    </details>
+                  )}
+                </div>
+              )}
+            </div>
+
             <div className="flex items-center justify-between rounded-lg bg-primary/5 p-4">
               <div>
                 <p className="font-medium text-foreground">Create Backup</p>
@@ -436,6 +524,7 @@ export default function Settings() {
                 Backup
               </Button>
             </div>
+
 
             <AlertDialog>
               <AlertDialogTrigger asChild>
