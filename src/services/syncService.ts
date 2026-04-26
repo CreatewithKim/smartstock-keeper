@@ -329,6 +329,90 @@ export async function startSync(userId: string) {
   }
 }
 
+export interface ForceUploadProgress {
+  store: StoreName;
+  table: string;
+  totalUnsynced: number;
+  uploaded: number;
+  failed: number;
+  done: boolean;
+}
+
+export interface ForceUploadResult {
+  totalUnsynced: number;
+  uploaded: number;
+  failed: number;
+  byStore: Record<string, { uploaded: number; failed: number; total: number }>;
+  errors: string[];
+}
+
+/**
+ * Push every unsynced local row to the cloud, reporting progress per store.
+ * Used by the "Force Upload Local Data" recovery button in Settings.
+ */
+export async function forceUploadAll(
+  userId: string,
+  onProgress?: (p: ForceUploadProgress) => void,
+): Promise<ForceUploadResult> {
+  const result: ForceUploadResult = {
+    totalUnsynced: 0,
+    uploaded: 0,
+    failed: 0,
+    byStore: {},
+    errors: [],
+  };
+
+  if (!navigator.onLine) {
+    result.errors.push('You are offline. Connect to the internet and try again.');
+    return result;
+  }
+
+  const db = await openLocal();
+
+  for (const store of ALL_STORES) {
+    const table = STORE_TO_TABLE[store];
+    const all = await db.getAll(store as any);
+    const unsynced = all.filter((r: any) => !r.remoteId);
+    const total = unsynced.length;
+    result.totalUnsynced += total;
+    result.byStore[store] = { uploaded: 0, failed: 0, total };
+
+    onProgress?.({ store, table, totalUnsynced: total, uploaded: 0, failed: 0, done: total === 0 });
+    if (total === 0) continue;
+
+    for (const row of unsynced) {
+      const payload = localToRemote(store, row, userId);
+      const { data, error } = await supabase
+        .from(table as any)
+        .insert(payload)
+        .select()
+        .single();
+
+      if (error) {
+        result.failed += 1;
+        result.byStore[store].failed += 1;
+        result.errors.push(`${table}: ${error.message}`);
+      } else if (data) {
+        const updated = { ...row, remoteId: (data as any).id, syncedAt: new Date() };
+        await db.put(store as any, updated);
+        result.uploaded += 1;
+        result.byStore[store].uploaded += 1;
+      }
+
+      onProgress?.({
+        store,
+        table,
+        totalUnsynced: total,
+        uploaded: result.byStore[store].uploaded,
+        failed: result.byStore[store].failed,
+        done: result.byStore[store].uploaded + result.byStore[store].failed >= total,
+      });
+    }
+  }
+
+  return result;
+}
+
 /** Stop syncing and wipe local data (called on sign-out). */
 export async function stopSyncAndClear() {
   if (intervalHandle) {
