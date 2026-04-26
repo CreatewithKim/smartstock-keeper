@@ -481,6 +481,103 @@ export default function Settings() {
           </div>
 
           <div className="space-y-3">
+            {/* Import Data from File */}
+            <div className="rounded-lg bg-primary/5 p-4 space-y-3">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1">
+                  <p className="font-medium text-foreground">Import Data from File</p>
+                  <p className="text-sm text-muted-foreground">
+                    Upload a CSV or JSON file you previously downloaded (products, sales, intakes, etc.). Records are added to this device and synced to your account automatically.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-[1fr_auto_auto]">
+                <Input
+                  type="file"
+                  accept=".csv,.json,text/csv,application/json"
+                  onChange={(e) => {
+                    setImportFile(e.target.files?.[0] ?? null);
+                    setImportResult(null);
+                  }}
+                  disabled={isImporting}
+                />
+                <Select
+                  value={importType}
+                  onValueChange={(v) => setImportType(v as ImportDataType | 'auto')}
+                  disabled={isImporting}
+                >
+                  <SelectTrigger className="sm:w-44">
+                    <SelectValue placeholder="Auto-detect" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="auto">Auto-detect</SelectItem>
+                    {Object.entries(IMPORT_TYPE_LABELS).map(([k, label]) => (
+                      <SelectItem key={k} value={k}>{label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  onClick={handleImportFile}
+                  disabled={!importFile || isImporting}
+                  variant="outline"
+                  className="gap-2"
+                >
+                  <FileUp className="h-4 w-4" />
+                  {isImporting ? 'Importing…' : 'Import'}
+                </Button>
+              </div>
+
+              <p className="text-xs text-muted-foreground">
+                Tip: For sales, intakes, or products-out files, the products must already exist on this device (matched by name). Duplicate products are skipped.
+              </p>
+
+              {isImporting && importProgress && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span>{importProgress.type ? `Importing ${importProgress.type}…` : 'Reading file…'}</span>
+                    <span>{importProgress.processed} / {importProgress.total}</span>
+                  </div>
+                  <Progress
+                    value={importProgress.total > 0 ? (importProgress.processed / importProgress.total) * 100 : 0}
+                    className="h-2"
+                  />
+                </div>
+              )}
+
+              {!isImporting && importResult && (
+                <div className="rounded-md border border-border bg-background/40 p-3 space-y-2">
+                  <div className="flex items-center gap-2 text-sm">
+                    {importResult.result.failed === 0 ? (
+                      <CheckCircle2 className="h-4 w-4 text-primary" />
+                    ) : (
+                      <AlertCircle className="h-4 w-4 text-destructive" />
+                    )}
+                    <span className="font-medium text-foreground">
+                      {IMPORT_TYPE_LABELS[importResult.type]}: {importResult.result.inserted} added
+                      {importResult.result.skipped > 0 && `, ${importResult.result.skipped} skipped`}
+                      {importResult.result.failed > 0 && `, ${importResult.result.failed} failed`}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Read {importResult.rowCount} row{importResult.rowCount === 1 ? '' : 's'} from file.
+                  </p>
+                  {importResult.result.errors.length > 0 && (
+                    <details className="text-xs text-muted-foreground">
+                      <summary className="cursor-pointer text-destructive">
+                        View {importResult.result.errors.length} error{importResult.result.errors.length === 1 ? '' : 's'}
+                      </summary>
+                      <ul className="mt-1 space-y-0.5 pl-3 list-disc">
+                        {importResult.result.errors.slice(0, 10).map((e, i) => (
+                          <li key={i}>{e}</li>
+                        ))}
+                      </ul>
+                    </details>
+                  )}
+                </div>
+              )}
+            </div>
+
             {/* Force Upload Local Data */}
             <div className="rounded-lg bg-primary/5 p-4 space-y-3">
               <div className="flex items-center justify-between gap-4">
