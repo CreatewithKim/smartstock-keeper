@@ -40,6 +40,77 @@ export default function Settings() {
   const [showPassword, setShowPassword] = useState(false);
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{
+    currentStore: string;
+    storeUploaded: number;
+    storeTotal: number;
+    overallUploaded: number;
+    overallFailed: number;
+  } | null>(null);
+  const [uploadResult, setUploadResult] = useState<ForceUploadResult | null>(null);
+
+  const handleForceUpload = async () => {
+    if (!user?.id) return;
+    if (!navigator.onLine) {
+      toast({
+        title: "You're offline",
+        description: "Connect to the internet and try again.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setIsUploading(true);
+    setUploadResult(null);
+    setUploadProgress({ currentStore: '', storeUploaded: 0, storeTotal: 0, overallUploaded: 0, overallFailed: 0 });
+    try {
+      let overallUploaded = 0;
+      let overallFailed = 0;
+      const result = await forceUploadAll(user.id, (p) => {
+        setUploadProgress((prev) => {
+          // recompute overall from per-store snapshot in progress callback
+          const next = {
+            currentStore: p.store,
+            storeUploaded: p.uploaded,
+            storeTotal: p.totalUnsynced,
+            overallUploaded: (prev?.overallUploaded ?? 0),
+            overallFailed: (prev?.overallFailed ?? 0),
+          };
+          // This callback fires after each row; track deltas
+          return next;
+        });
+        overallUploaded = p.uploaded; // best-effort; final result is authoritative
+        overallFailed = p.failed;
+      });
+      setUploadResult(result);
+      if (result.uploaded === 0 && result.totalUnsynced === 0) {
+        toast({
+          title: "Nothing to upload",
+          description: "All your local data is already synced to your account.",
+        });
+      } else if (result.failed === 0) {
+        toast({
+          title: "Upload complete",
+          description: `Uploaded ${result.uploaded} record${result.uploaded === 1 ? '' : 's'} to your account.`,
+        });
+      } else {
+        toast({
+          title: "Upload finished with errors",
+          description: `${result.uploaded} uploaded, ${result.failed} failed.`,
+          variant: "destructive",
+        });
+      }
+    } catch (err: any) {
+      toast({
+        title: "Upload failed",
+        description: err?.message || "Unexpected error during upload.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUploading(false);
+      setUploadProgress(null);
+    }
+  };
 
   const verifyCurrentPassword = async (): Promise<boolean> => {
     if (!currentPassword.trim()) {
