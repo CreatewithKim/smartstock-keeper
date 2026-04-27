@@ -232,7 +232,21 @@ export async function pullFromCloud(userId: string) {
   if (!navigator.onLine) return;
   const db = await openLocal();
 
-  for (const store of ALL_STORES) {
+  // Pull products FIRST so we can build a remote→local product id map
+  // used to rewrite productId on child rows (sales, intakes, products_out).
+  const productRemoteToLocal = new Map<string, number>();
+
+  // Order: products before anything that references them.
+  const orderedStores: StoreName[] = [
+    'products',
+    'sales',
+    'stockIntakes',
+    'excessSales',
+    'productsOut',
+    'expenses',
+  ];
+
+  for (const store of orderedStores) {
     const table = STORE_TO_TABLE[store];
     const { data, error } = await supabase
       .from(table as any)
@@ -251,11 +265,6 @@ export async function pullFromCloud(userId: string) {
     const tx = db.transaction(store as any, 'readwrite');
     const objStore = tx.objectStore(store as any);
 
-    // Index existing local rows by remoteId so we can update in place
-    // WITHOUT changing their local autoincrement id. Overwriting the
-    // local id with the remote bigint corrupts the autoincrement
-    // counter and causes ConstraintError on subsequent inserts, plus
-    // it breaks productId references stored on sales/intakes.
     const existingLocal = await objStore.getAll();
     const localByRemoteId = new Map<string, any>();
     for (const row of existingLocal as any[]) {
@@ -264,26 +273,32 @@ export async function pullFromCloud(userId: string) {
       }
     }
 
-    // 0) Self-heal: a previous version of this code wrote the remote
-    //    bigint id directly as the local autoincrement key. Those rows
-    //    poison the autoincrement counter and break new inserts. Drop
-    //    any synced row whose local id equals its remoteId — we'll
-    //    re-add it below with a clean autoincrement key.
+    // 0) Self-heal: previous code wrote the remote bigint id as the
+    //    local autoincrement key, which poisons the counter and
+    //    breaks new inserts. Drop any synced row whose local id
+    //    equals its remoteId so it gets re-added with a clean key.
     for (const row of existingLocal as any[]) {
       if (
         row.remoteId != null &&
         row.id != null &&
         Number(row.id) === Number(row.remoteId)
       ) {
-        await objStore.delete(row.id);
+        try {
+          await objStore.delete(row.id);
+        } catch {
+          /* ignore */
+        }
         localByRemoteId.delete(String(row.remoteId));
       }
     }
 
-    // 1) Delete any previously-synced local rows that no longer exist remotely.
+    // 1) Delete previously-synced local rows that no longer exist remotely.
     for (const row of existingLocal as any[]) {
-      if (row.remoteId != null && !remoteIds.has(Number(row.remoteId))) {
-        // Skip rows we already deleted in the self-heal step above.
+      if (
+        row.remoteId != null &&
+        !remoteIds.has(Number(row.remoteId)) &&
+        Number(row.id) !== Number(row.remoteId) // skip ones removed above
+      ) {
         try {
           await objStore.delete(row.id);
         } catch {
@@ -297,11 +312,31 @@ export async function pullFromCloud(userId: string) {
     //    assign a fresh autoincrement id by omitting `id`.
     for (const remoteRow of remoteRows) {
       const localRow: any = remoteToLocal(store, remoteRow);
+
+      // For child stores, rewrite productId from the remote product id
+      // to the matching local product id we just established.
+      if (
+        (store === 'sales' || store === 'stockIntakes' || store === 'productsOut') &&
+        remoteRow.product_id != null
+      ) {
+        const mapped = productRemoteToLocal.get(String(remoteRow.product_id));
+        if (mapped != null) {
+          localRow.productId = mapped;
+        }
+      }
+
       const existing = localByRemoteId.get(String(remoteRow.id));
       if (existing && existing.id != null) {
         localRow.id = existing.id;
+      } else {
+        delete localRow.id;
       }
-      await objStore.put(localRow);
+      const newKey = await objStore.put(localRow);
+
+      // Record product remote→local mapping for child-store rewrites.
+      if (store === 'products') {
+        productRemoteToLocal.set(String(remoteRow.id), Number(newKey));
+      }
     }
 
     await tx.done;
