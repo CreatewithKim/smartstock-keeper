@@ -264,10 +264,31 @@ export async function pullFromCloud(userId: string) {
       }
     }
 
+    // 0) Self-heal: a previous version of this code wrote the remote
+    //    bigint id directly as the local autoincrement key. Those rows
+    //    poison the autoincrement counter and break new inserts. Drop
+    //    any synced row whose local id equals its remoteId — we'll
+    //    re-add it below with a clean autoincrement key.
+    for (const row of existingLocal as any[]) {
+      if (
+        row.remoteId != null &&
+        row.id != null &&
+        Number(row.id) === Number(row.remoteId)
+      ) {
+        await objStore.delete(row.id);
+        localByRemoteId.delete(String(row.remoteId));
+      }
+    }
+
     // 1) Delete any previously-synced local rows that no longer exist remotely.
     for (const row of existingLocal as any[]) {
       if (row.remoteId != null && !remoteIds.has(Number(row.remoteId))) {
-        await objStore.delete(row.id);
+        // Skip rows we already deleted in the self-heal step above.
+        try {
+          await objStore.delete(row.id);
+        } catch {
+          /* ignore */
+        }
       }
     }
 
