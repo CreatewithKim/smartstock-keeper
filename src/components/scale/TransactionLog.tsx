@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { Clock } from 'lucide-react';
 import { GlassCard } from '@/components/GlassCard';
 import { Badge } from '@/components/ui/badge';
@@ -20,23 +21,29 @@ interface TransactionLogProps {
 }
 
 export function TransactionLog({ readings, onClear }: TransactionLogProps) {
+  const todayReadings = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return readings.filter(r => new Date(r.timestamp) >= today);
+  }, [readings]);
+
   return (
     <GlassCard className="p-4">
       <div className="flex items-center justify-between mb-4">
         <h3 className="font-semibold flex items-center gap-2">
           <Clock className="h-4 w-4" />
-          Transaction Log
+          Today's Transactions
         </h3>
-        {readings.length > 0 && (
+        {todayReadings.length > 0 && (
           <Button variant="outline" size="sm" onClick={onClear}>
             Clear History
           </Button>
         )}
       </div>
       
-      {readings.length === 0 ? (
+      {todayReadings.length === 0 ? (
         <p className="text-center text-muted-foreground py-8">
-          No transactions yet. Scale readings will appear here.
+          No transactions today. Scale readings will appear here.
         </p>
       ) : (
         <div className="overflow-x-auto">
@@ -53,10 +60,10 @@ export function TransactionLog({ readings, onClear }: TransactionLogProps) {
               </tr>
             </thead>
             <tbody>
-              {readings.map((reading, index) => (
+              {todayReadings.map((reading, index) => (
                 <tr key={index} className="border-b border-border/50 hover:bg-muted/20">
                   <td className="py-2 px-3 text-muted-foreground">
-                    {reading.timestamp.toLocaleTimeString()}
+                    {new Date(reading.timestamp).toLocaleTimeString()}
                   </td>
                   <td className="py-2 px-3">{reading.plu}</td>
                   <td className="py-2 px-3">{reading.productName}</td>

@@ -5,8 +5,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { salesDB, excessSalesDB } from "@/services/db";
-import { Smartphone, Wallet, Banknote, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Smartphone, Wallet, Banknote, AlertCircle, CheckCircle2, CalendarIcon } from "lucide-react";
 import { format } from "date-fns";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { cn } from "@/lib/utils";
 
 interface AvenueRecord {
   mpesa: number;
@@ -28,12 +31,14 @@ export default function Avenues() {
   const [cash, setCash] = useState("");
   
   const [savedRecords, setSavedRecords] = useState<AvenueRecord[]>([]);
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [calendarOpen, setCalendarOpen] = useState(false);
 
-  const today = format(new Date(), "yyyy-MM-dd");
+  const selectedDateStr = format(selectedDate, "yyyy-MM-dd");
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [selectedDate]);
 
   const loadData = async () => {
     try {
@@ -53,11 +58,15 @@ export default function Avenues() {
         setSavedRecords(records);
         
         // Load today's record if exists
-        const todayRecord = records.find(r => r.date === today);
-        if (todayRecord) {
-          setMpesa(todayRecord.mpesa.toFixed(2));
-          setPochiLaBiashara(todayRecord.pochiLaBiashara.toFixed(2));
-          setCash(todayRecord.cash.toFixed(2));
+        const dateRecord = records.find(r => r.date === selectedDateStr);
+        if (dateRecord) {
+          setMpesa(dateRecord.mpesa.toFixed(2));
+          setPochiLaBiashara(dateRecord.pochiLaBiashara.toFixed(2));
+          setCash(dateRecord.cash.toFixed(2));
+        } else {
+          setMpesa("");
+          setPochiLaBiashara("");
+          setCash("");
         }
       }
     } catch (error) {
@@ -95,11 +104,11 @@ export default function Avenues() {
       mpesa: mpesaAmount,
       pochiLaBiashara: pochiAmount,
       cash: cashAmount,
-      date: today,
+      date: selectedDateStr,
     };
 
-    // Update or add today's record
-    const updatedRecords = savedRecords.filter(r => r.date !== today);
+    // Update or add selected date's record
+    const updatedRecords = savedRecords.filter(r => r.date !== selectedDateStr);
     updatedRecords.push(newRecord);
     
     // Keep only last 30 days
@@ -125,11 +134,35 @@ export default function Avenues() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">Payment Avenues</h1>
-        <p className="text-muted-foreground">
-          Record daily payments from different channels
-        </p>
+      <div className="flex items-center justify-between flex-wrap gap-4">
+        <div>
+          <h1 className="text-3xl font-bold">Payment Avenues</h1>
+          <p className="text-muted-foreground">
+            Record daily payments from different channels
+          </p>
+        </div>
+        <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+          <PopoverTrigger asChild>
+            <Button variant="outline" className={cn("w-[220px] justify-start text-left font-normal", !selectedDate && "text-muted-foreground")}>
+              <CalendarIcon className="mr-2 h-4 w-4" />
+              {format(selectedDate, "MMMM d, yyyy")}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="end">
+            <Calendar
+              mode="single"
+              selected={selectedDate}
+              onSelect={(date) => {
+                if (date) {
+                  setSelectedDate(date);
+                  setCalendarOpen(false);
+                }
+              }}
+              disabled={(date) => date > new Date()}
+              initialFocus
+            />
+          </PopoverContent>
+        </Popover>
       </div>
 
       {/* Today's Summary */}
@@ -226,7 +259,7 @@ export default function Avenues() {
 
       {/* Input Form */}
       <GlassCard className="p-6">
-        <h2 className="text-lg font-semibold mb-4">Record Payments - {format(new Date(), "MMMM d, yyyy")}</h2>
+        <h2 className="text-lg font-semibold mb-4">Record Payments - {format(selectedDate, "MMMM d, yyyy")}</h2>
         
         <div className="grid gap-6 md:grid-cols-3">
           <div className="space-y-2">
