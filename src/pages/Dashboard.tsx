@@ -45,7 +45,7 @@ export default function Dashboard() {
   };
 
   const productStockValue = products.reduce(
-    (sum, p) => sum + (p.currentStock || 0) * (p.sellingPrice || 0),
+    (sum, p) => sum + p.currentStock * p.sellingPrice,
     0
   );
   const totalStockValue = productStockValue - totalExcessSales;

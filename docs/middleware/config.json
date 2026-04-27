@@ -1,0 +1,31 @@
+{
+  "serial": {
+    "port": "COM3",
+    "baud_rate": 9600,
+    "data_bits": 8,
+    "parity": "N",
+    "stop_bits": 1,
+    "timeout": 1.0
+  },
+  "websocket": {
+    "host": "localhost",
+    "port": 8765
+  },
+  "scale": {
+    "stability_threshold": 0.01,
+    "stability_readings": 3,
+    "duplicate_timeout": 2.0
+  },
+  "plu_prices": {
+    "0001": 850.00,
+    "0002": 1200.00,
+    "0003": 650.00,
+    "0004": 480.00,
+    "0005": 950.00,
+    "0006": 720.00,
+    "0007": 1100.00,
+    "0008": 550.00,
+    "0009": 890.00,
+    "0010": 1350.00
+  }
+}

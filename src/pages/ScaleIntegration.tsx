@@ -10,7 +10,6 @@ import { useScaleConnection } from '@/hooks/useScaleConnection';
 import { ScaleStatusIndicator } from '@/components/scale/ScaleStatusIndicator';
 import { LiveWeightDisplay } from '@/components/scale/LiveWeightDisplay';
 import { TransactionLog, ScaleReading } from '@/components/scale/TransactionLog';
-import { SalesHistory } from '@/components/scale/SalesHistory';
 
 const ScaleIntegration = () => {
   const {
@@ -350,11 +349,8 @@ const ScaleIntegration = () => {
         </div>
       </div>
 
-      {/* Today's Transaction Log */}
+      {/* Transaction Log */}
       <TransactionLog readings={readings} onClear={clearReadings} />
-
-      {/* Full Sales History */}
-      <SalesHistory />
     </div>
   );
 };

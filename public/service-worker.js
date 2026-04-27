@@ -1,9 +1,11 @@
-const CACHE_NAME = 'smartstock-v5';
+const CACHE_NAME = 'smartstock-v4';
+const DYNAMIC_CACHE = 'smartstock-dynamic-v3';
 
-// Install – cache app shell and skip waiting immediately
+// Install service worker - cache shell immediately
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
+      console.log('Service Worker: Caching app shell');
       return cache.addAll([
         '/',
         '/index.html',
@@ -16,31 +18,36 @@ self.addEventListener('install', (event) => {
   self.skipWaiting();
 });
 
-// Activate – purge ALL old caches, then claim clients
+// Activate service worker and clean up old caches
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((cacheNames) => {
       return Promise.all(
-        cacheNames
-          .filter((name) => name !== CACHE_NAME)
-          .map((name) => {
-            console.log('Service Worker: Deleting old cache:', name);
-            return caches.delete(name);
-          })
+        cacheNames.map((cacheName) => {
+          if (cacheName !== CACHE_NAME && cacheName !== DYNAMIC_CACHE) {
+            console.log('Service Worker: Deleting old cache:', cacheName);
+            return caches.delete(cacheName);
+          }
+        })
       );
-    }).then(() => self.clients.claim())
+    })
   );
+  self.clients.claim();
 });
 
-// Fetch – Network First for everything, cache fallback for offline
+// Fetch strategy: Cache First with Network Fallback for offline support
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
+  // Skip non-GET requests
   if (request.method !== 'GET') return;
+
+  // Skip chrome-extension and other non-http requests
   if (!url.protocol.startsWith('http')) return;
 
-  // Never cache Vite dev server resources
+  // IMPORTANT: Never cache Vite dev server modules/routes.
+  // Caching these can lead to mixed module graphs and React hook dispatcher errors.
   if (
     url.pathname.startsWith('/@vite') ||
     url.pathname.startsWith('/@react-refresh') ||
@@ -51,33 +58,47 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Network First for ALL requests – always get latest when online
-  event.respondWith(
-    fetch(request)
-      .then((response) => {
-        // Cache successful responses for offline use
-        if (response && response.status === 200) {
+  // For navigation requests (HTML pages), use Network First with offline fallback
+  if (request.mode === 'navigate') {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
           const responseClone = response.clone();
           caches.open(CACHE_NAME).then((cache) => {
             cache.put(request, responseClone);
           });
-        }
-        return response;
-      })
-      .catch(async () => {
-        // Offline – serve from cache
-        const cachedResponse = await caches.match(request);
-        if (cachedResponse) return cachedResponse;
-        // For navigation, fall back to cached index
-        if (request.mode === 'navigate') {
+          return response;
+        })
+        .catch(async () => {
+          const cachedResponse = await caches.match(request);
+          if (cachedResponse) return cachedResponse;
           return caches.match('/');
-        }
-        return new Response('Offline', { status: 503 });
-      })
+        })
+    );
+    return;
+  }
+
+  // For all other requests (JS, CSS, images, fonts), use Stale-While-Revalidate
+  event.respondWith(
+    caches.match(request).then((cachedResponse) => {
+      const fetchPromise = fetch(request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            const responseClone = networkResponse.clone();
+            caches.open(DYNAMIC_CACHE).then((cache) => {
+              cache.put(request, responseClone);
+            });
+          }
+          return networkResponse;
+        })
+        .catch(() => cachedResponse);
+
+      return cachedResponse || fetchPromise;
+    })
   );
 });
 
-// Handle update messages
+// Handle messages from the app
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SKIP_WAITING') {
     self.skipWaiting();

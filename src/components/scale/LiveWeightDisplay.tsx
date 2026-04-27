@@ -29,7 +29,7 @@ export function LiveWeightDisplay({
   const isStable = scaleState === 'STABLE';
   const isWeighing = scaleState === 'WEIGHING';
   const isDisconnected = scaleState === 'DISCONNECTED';
-  const canCompleteSale = !isDisconnected && !isProcessing && (currentWeight?.weight ?? 0) > 0;
+  const canCompleteSale = isStable && !completeSaleDisabled && !isProcessing;
 
   return (
     <GlassCard 
@@ -81,7 +81,9 @@ export function LiveWeightDisplay({
       )}>
         <div className={cn(
           'text-5xl md:text-6xl font-bold font-mono tracking-tight transition-all',
-          isStable ? 'text-green-500' : 'text-foreground'
+          isStable ? 'text-green-500' : 
+          isWeighing ? 'text-yellow-500' : 
+          'text-foreground'
         )}>
           {displayWeight.toFixed(3)}
         </div>
@@ -104,6 +106,11 @@ export function LiveWeightDisplay({
             <CheckCircle className="h-5 w-5" />
             {isProcessing ? 'Processing...' : 'Complete Sale'}
           </Button>
+          {!isStable && scaleState !== 'DISCONNECTED' && (
+            <p className="text-xs text-muted-foreground text-center mt-2">
+              Waiting for weight to stabilize...
+            </p>
+          )}
         </div>
       )}
 

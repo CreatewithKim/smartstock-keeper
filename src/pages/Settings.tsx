@@ -1,9 +1,7 @@
 import { useState, useEffect } from "react";
 import { GlassCard } from "@/components/GlassCard";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Database, Download, Trash2, Info, Scale, UserCog, LogOut, Eye, EyeOff, Mail, Lock } from "lucide-react";
+import { Database, Download, Trash2, Info, Scale } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
   AlertDialog,
@@ -18,8 +16,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import { ScaleConfiguration } from "@/components/scale/ScaleConfiguration";
 import { ScaleConfig } from "@/hooks/useScaleConnection";
-import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
 
 const DEFAULT_SCALE_CONFIG: ScaleConfig = {
   port: 'COM3',
@@ -30,97 +26,7 @@ const DEFAULT_SCALE_CONFIG: ScaleConfig = {
 
 export default function Settings() {
   const { toast } = useToast();
-  const { user, signOut } = useAuth();
   const [scaleConfig, setScaleConfig] = useState<ScaleConfig>(DEFAULT_SCALE_CONFIG);
-  const [newEmail, setNewEmail] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
-  const [isUpdating, setIsUpdating] = useState(false);
-
-  const verifyCurrentPassword = async (): Promise<boolean> => {
-    if (!currentPassword.trim()) {
-      toast({
-        title: "Current Password Required",
-        description: "Please enter your current password to confirm changes.",
-        variant: "destructive",
-      });
-      return false;
-    }
-    const { error } = await supabase.auth.signInWithPassword({
-      email: user?.email || "",
-      password: currentPassword,
-    });
-    if (error) {
-      toast({
-        title: "Incorrect Password",
-        description: "The current password you entered is incorrect.",
-        variant: "destructive",
-      });
-      return false;
-    }
-    return true;
-  };
-
-  const handleUpdateEmail = async () => {
-    if (!newEmail.trim()) return;
-    setIsUpdating(true);
-    try {
-      if (!(await verifyCurrentPassword())) return;
-      const { error } = await supabase.auth.updateUser({ email: newEmail });
-      if (error) throw error;
-      toast({
-        title: "Confirmation Sent",
-        description: "Check both your old and new email inboxes to confirm the change.",
-      });
-      setNewEmail("");
-      setCurrentPassword("");
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to update email",
-        variant: "destructive",
-      });
-    } finally {
-      setIsUpdating(false);
-    }
-  };
-
-  const handleUpdatePassword = async () => {
-    if (!newPassword.trim() || newPassword.length < 6) {
-      toast({
-        title: "Invalid Password",
-        description: "Password must be at least 6 characters",
-        variant: "destructive",
-      });
-      return;
-    }
-    setIsUpdating(true);
-    try {
-      if (!(await verifyCurrentPassword())) return;
-      const { error } = await supabase.auth.updateUser({ password: newPassword });
-      if (error) throw error;
-      toast({
-        title: "Password Updated",
-        description: "Your password has been changed successfully.",
-      });
-      setNewPassword("");
-      setCurrentPassword("");
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to update password",
-        variant: "destructive",
-      });
-    } finally {
-      setIsUpdating(false);
-    }
-  };
-
-  const handleSwitchAccount = async () => {
-    await signOut();
-  };
 
   useEffect(() => {
     const saved = localStorage.getItem('scaleConfig');
@@ -191,114 +97,6 @@ export default function Settings() {
         <h1 className="text-4xl font-bold text-foreground mb-2">Settings</h1>
         <p className="text-muted-foreground">Manage your app settings and data</p>
       </div>
-
-      {/* Account Management */}
-      <GlassCard>
-        <div className="space-y-4">
-          <div className="flex items-start gap-4">
-            <div className="rounded-xl bg-primary/10 p-3">
-              <UserCog className="h-6 w-6 text-primary" />
-            </div>
-            <div className="flex-1">
-              <h2 className="text-xl font-semibold text-foreground mb-1">Account</h2>
-              <p className="text-sm text-muted-foreground">
-                Signed in as <span className="font-medium text-foreground">{user?.email}</span>
-              </p>
-            </div>
-          </div>
-
-          {/* Current Password Confirmation */}
-          <div className="rounded-lg bg-muted/50 p-4 space-y-3">
-            <div className="flex items-center gap-2">
-              <Lock className="h-4 w-4 text-muted-foreground" />
-              <p className="font-medium text-foreground">Current Password</p>
-            </div>
-            <div className="relative">
-              <Input
-                type={showCurrentPassword ? "text" : "password"}
-                placeholder="Enter current password to confirm changes"
-                value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
-              />
-              <button
-                type="button"
-                onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-              >
-                {showCurrentPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </button>
-            </div>
-            <p className="text-xs text-muted-foreground">Required before changing your email or password.</p>
-          </div>
-
-          {currentPassword.trim() && (
-            <>
-              {/* Change Email */}
-              <div className="rounded-lg bg-primary/5 p-4 space-y-3">
-                <div className="flex items-center gap-2">
-                  <Mail className="h-4 w-4 text-primary" />
-                  <p className="font-medium text-foreground">Change Email</p>
-                </div>
-                <div className="flex gap-2">
-                  <Input
-                    type="email"
-                    placeholder="New email address"
-                    value={newEmail}
-                    onChange={(e) => setNewEmail(e.target.value)}
-                    className="flex-1"
-                  />
-                  <Button onClick={handleUpdateEmail} disabled={isUpdating || !newEmail.trim()} variant="outline">
-                    Update
-                  </Button>
-                </div>
-                <p className="text-xs text-muted-foreground">A confirmation link will be sent to both your current and new email.</p>
-              </div>
-
-              {/* Change Password */}
-              <div className="rounded-lg bg-primary/5 p-4 space-y-3">
-                <div className="flex items-center gap-2">
-                  <Lock className="h-4 w-4 text-primary" />
-                  <p className="font-medium text-foreground">Change Password</p>
-                </div>
-                <div className="flex gap-2">
-                  <div className="relative flex-1">
-                    <Input
-                      type={showPassword ? "text" : "password"}
-                      placeholder="New password (min 6 characters)"
-                      value={newPassword}
-                      onChange={(e) => setNewPassword(e.target.value)}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                    >
-                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </button>
-                  </div>
-                  <Button onClick={handleUpdatePassword} disabled={isUpdating || newPassword.length < 6} variant="outline">
-                    Update
-                  </Button>
-                </div>
-              </div>
-            </>
-          )}
-
-          {/* Switch Account */}
-          <div className="flex items-center justify-between rounded-lg bg-muted/50 p-4">
-            <div>
-              <p className="font-medium text-foreground">Switch Account</p>
-              <p className="text-sm text-muted-foreground">
-                Sign out and log in with a different account
-              </p>
-            </div>
-            <Button onClick={handleSwitchAccount} variant="outline" className="gap-2">
-              <LogOut className="h-4 w-4" />
-              Switch
-            </Button>
-          </div>
-        </div>
-      </GlassCard>
 
       {/* Scale Configuration */}
       <div className="space-y-2">
