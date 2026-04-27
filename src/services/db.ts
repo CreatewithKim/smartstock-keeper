@@ -1,22 +1,6 @@
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
 import { normalizeDates, getDayRange, isDateInRange } from './dateUtils';
 
-// Best-effort push to cloud after a local write. Imported lazily to avoid
-// a circular import (syncService imports openDB from this file's DB name).
-function kickSync() {
-  if (typeof window === 'undefined') return;
-  import('./syncService').then(async ({ pushToCloud }) => {
-    try {
-      const { supabase } = await import('@/integrations/supabase/client');
-      const { data } = await supabase.auth.getSession();
-      const uid = data.session?.user?.id;
-      if (uid) await pushToCloud(uid);
-    } catch {
-      /* offline or signed out — periodic sync will catch up later */
-    }
-  }).catch(() => {});
-}
-
 export interface Product {
   id?: number;
   name: string;
@@ -198,9 +182,7 @@ export const productDB = {
 
   async add(product: Omit<Product, 'id'>): Promise<number> {
     const db = await getDB();
-    const id = await db.add('products', product as Product);
-    kickSync();
-    return id;
+    return db.add('products', product as Product);
   },
 
   async update(product: Product): Promise<void> {
@@ -252,7 +234,6 @@ export const stockIntakeDB = {
     // Update product stock
     await productDB.updateStock(intake.productId, intake.quantity, true);
     
-    kickSync();
     return id;
   },
 
@@ -293,7 +274,6 @@ export const salesDB = {
     // Update product stock
     await productDB.updateStock(sale.productId, sale.quantity, false);
     
-    kickSync();
     return id;
   },
 
@@ -329,9 +309,7 @@ export const excessSalesDB = {
 
   async add(excessSale: Omit<ExcessSale, 'id'>): Promise<number> {
     const db = await getDB();
-    const id = await db.add('excessSales', excessSale as ExcessSale);
-    kickSync();
-    return id;
+    return db.add('excessSales', excessSale as ExcessSale);
   },
 
   async update(excessSale: ExcessSale): Promise<void> {
@@ -396,7 +374,6 @@ export const productOutDB = {
     // Update product stock
     await productDB.updateStock(productOut.productId, productOut.quantity, false);
     
-    kickSync();
     return id;
   },
 
@@ -441,9 +418,7 @@ export const expenseDB = {
 
   async add(expense: Omit<Expense, 'id'>): Promise<number> {
     const db = await getDB();
-    const id = await db.add('expenses', expense as Expense);
-    kickSync();
-    return id;
+    return db.add('expenses', expense as Expense);
   },
 
   async update(expense: Expense): Promise<void> {
