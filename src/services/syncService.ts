@@ -251,12 +251,16 @@ export async function pullFromCloud(userId: string) {
     const tx = db.transaction(store as any, 'readwrite');
     const objStore = tx.objectStore(store as any);
 
-    // Index existing local rows by remoteId so we can replace in place.
+    // Index existing local rows by remoteId so we can update in place
+    // WITHOUT changing their local autoincrement id. Overwriting the
+    // local id with the remote bigint corrupts the autoincrement
+    // counter and causes ConstraintError on subsequent inserts, plus
+    // it breaks productId references stored on sales/intakes.
     const existingLocal = await objStore.getAll();
-    const localByRemoteId = new Map<number, any>();
+    const localByRemoteId = new Map<string, any>();
     for (const row of existingLocal as any[]) {
       if (row.remoteId != null) {
-        localByRemoteId.set(Number(row.remoteId), row);
+        localByRemoteId.set(String(row.remoteId), row);
       }
     }
 
@@ -267,10 +271,15 @@ export async function pullFromCloud(userId: string) {
       }
     }
 
-    // 2) Upsert every cloud row using remoteId as the stable local key.
+    // 2) Upsert every cloud row. Reuse the existing local id when we
+    //    already have this remoteId locally; otherwise let IndexedDB
+    //    assign a fresh autoincrement id by omitting `id`.
     for (const remoteRow of remoteRows) {
       const localRow: any = remoteToLocal(store, remoteRow);
-      localRow.id = Number(remoteRow.id);
+      const existing = localByRemoteId.get(String(remoteRow.id));
+      if (existing && existing.id != null) {
+        localRow.id = existing.id;
+      }
       await objStore.put(localRow);
     }
 
