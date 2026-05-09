@@ -29,7 +29,7 @@ export async function backupToCloud(): Promise<{
   // Replace strategy: wipe this user's rows, then re-insert from local.
   const tables = ["products", "stock_intakes", "sales", "excess_sales", "products_out", "expenses"] as const;
   for (const t of tables) {
-    const { error } = await supabase.from(t).delete().eq("user_id", user_id);
+    const { error } = await (supabase.from(t as any) as any).delete().eq("user_id", user_id);
     if (error) throw new Error(`Failed clearing ${t}: ${error.message}`);
   }
 
@@ -37,7 +37,7 @@ export async function backupToCloud(): Promise<{
     if (!rows.length) return;
     const size = 500;
     for (let i = 0; i < rows.length; i += size) {
-      const { error } = await supabase.from(table).insert(rows.slice(i, i + size));
+      const { error } = await (supabase.from(table as any) as any).insert(rows.slice(i, i + size));
       if (error) throw new Error(`Failed uploading ${table}: ${error.message}`);
     }
   };
