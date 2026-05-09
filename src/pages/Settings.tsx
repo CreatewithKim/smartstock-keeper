@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { GlassCard } from "@/components/GlassCard";
 import { Button } from "@/components/ui/button";
-import { Database, Download, Trash2, Info, Scale } from "lucide-react";
+import { Database, Download, Trash2, Info, Scale, Cloud, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
   AlertDialog,
@@ -16,6 +16,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { ScaleConfiguration } from "@/components/scale/ScaleConfiguration";
 import { ScaleConfig } from "@/hooks/useScaleConnection";
+import { backupToCloud, getLastBackupAt } from "@/services/cloudBackup";
+import { useAuth } from "@/contexts/AuthContext";
 
 const DEFAULT_SCALE_CONFIG: ScaleConfig = {
   port: 'COM3',
@@ -26,7 +28,28 @@ const DEFAULT_SCALE_CONFIG: ScaleConfig = {
 
 export default function Settings() {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [scaleConfig, setScaleConfig] = useState<ScaleConfig>(DEFAULT_SCALE_CONFIG);
+  const [backingUp, setBackingUp] = useState(false);
+  const [lastBackup, setLastBackup] = useState<Date | null>(getLastBackupAt());
+
+  const handleCloudBackup = async () => {
+    if (!user) {
+      toast({ title: "Sign in required", description: "Please sign in to back up to the cloud.", variant: "destructive" });
+      return;
+    }
+    setBackingUp(true);
+    try {
+      const { totals } = await backupToCloud();
+      setLastBackup(new Date());
+      const summary = Object.entries(totals).map(([k, v]) => `${v} ${k.replace("_", " ")}`).join(", ");
+      toast({ title: "Backup Complete", description: `Uploaded ${summary}.` });
+    } catch (err: any) {
+      toast({ title: "Backup Failed", description: err.message ?? "Unknown error", variant: "destructive" });
+    } finally {
+      setBackingUp(false);
+    }
+  };
 
   useEffect(() => {
     const saved = localStorage.getItem('scaleConfig');
@@ -159,6 +182,27 @@ export default function Settings() {
               <Button onClick={handleBackup} variant="outline" className="gap-2">
                 <Download className="h-4 w-4" />
                 Backup
+              </Button>
+            </div>
+
+            <div className="flex items-center justify-between rounded-lg bg-primary/5 p-4">
+              <div>
+                <p className="font-medium text-foreground flex items-center gap-2">
+                  <Cloud className="h-4 w-4 text-primary" />
+                  Backup to Cloud
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Upload all local data to your secure cloud account
+                </p>
+                {lastBackup && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Last backup: {lastBackup.toLocaleString()}
+                  </p>
+                )}
+              </div>
+              <Button onClick={handleCloudBackup} variant="outline" className="gap-2" disabled={backingUp}>
+                {backingUp ? <Loader2 className="h-4 w-4 animate-spin" /> : <Cloud className="h-4 w-4" />}
+                {backingUp ? "Backing up..." : "Backup to Cloud"}
               </Button>
             </div>
 
