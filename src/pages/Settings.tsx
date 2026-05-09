@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { GlassCard } from "@/components/GlassCard";
 import { Button } from "@/components/ui/button";
-import { Database, Download, Trash2, Info, Scale } from "lucide-react";
+import { Database, Download, Trash2, Info, Scale, Cloud, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
   AlertDialog,
@@ -16,6 +16,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { ScaleConfiguration } from "@/components/scale/ScaleConfiguration";
 import { ScaleConfig } from "@/hooks/useScaleConnection";
+import { backupToCloud, getLastBackupAt } from "@/services/cloudBackup";
+import { useAuth } from "@/contexts/AuthContext";
 
 const DEFAULT_SCALE_CONFIG: ScaleConfig = {
   port: 'COM3',
