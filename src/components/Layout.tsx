@@ -26,6 +26,11 @@ const navItems = [
 
 export const Layout = ({ children }: LayoutProps) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const { user, signOut } = useAuth();
+  const handleSignOut = async () => {
+    await signOut();
+    toast.success("Signed out");
+  };
 
   return (
     <div className="min-h-screen w-full">
