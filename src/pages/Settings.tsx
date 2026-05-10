@@ -196,14 +196,14 @@ export default function Settings() {
               </Button>
             </div>
 
-            <div className="flex items-center justify-between rounded-lg bg-primary/5 p-4">
+            <div className="space-y-3 rounded-lg bg-primary/5 p-4">
               <div>
                 <p className="font-medium text-foreground flex items-center gap-2">
-                  <Cloud className="h-4 w-4 text-primary" />
-                  Backup to Cloud
+                  <HardDriveUpload className="h-4 w-4 text-primary" />
+                  Backup to Google Drive
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  Upload all local data to your secure cloud account
+                  Export all data as a JSON file to your personal Google Drive. Access it from any device.
                 </p>
                 {lastBackup && (
                   <p className="text-xs text-muted-foreground mt-1">
@@ -211,9 +211,27 @@ export default function Settings() {
                   </p>
                 )}
               </div>
-              <Button onClick={handleCloudBackup} variant="outline" className="gap-2" disabled={backingUp}>
-                {backingUp ? <Loader2 className="h-4 w-4 animate-spin" /> : <Cloud className="h-4 w-4" />}
-                {backingUp ? "Backing up..." : "Backup to Cloud"}
+
+              <div className="space-y-2">
+                <Label htmlFor="gdrive-client-id" className="text-xs">Google OAuth Client ID</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="gdrive-client-id"
+                    value={clientId}
+                    onChange={(e) => setClientIdState(e.target.value)}
+                    placeholder="xxxxxxxxxxxx.apps.googleusercontent.com"
+                    className="text-xs"
+                  />
+                  <Button onClick={handleSaveClientId} variant="outline" size="sm">Save</Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Create a Web OAuth Client at console.cloud.google.com (Drive API enabled). Add this app's URL as an authorized JavaScript origin.
+                </p>
+              </div>
+
+              <Button onClick={handleDriveBackup} variant="outline" className="gap-2 w-full" disabled={backingUp}>
+                {backingUp ? <Loader2 className="h-4 w-4 animate-spin" /> : <HardDriveUpload className="h-4 w-4" />}
+                {backingUp ? "Backing up..." : "Backup to Google Drive"}
               </Button>
             </div>
 
