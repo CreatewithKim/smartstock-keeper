@@ -623,6 +623,8 @@ export default function Sales() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <SalesHistory />
     </div>
   );
 }
