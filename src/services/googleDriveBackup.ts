@@ -14,7 +14,7 @@ const LAST_BACKUP_KEY = "lastGoogleDriveBackup";
 // or hardcode below. End users do NOT need to configure anything — they just
 // authorize their own Google account at backup time and the file is uploaded
 // to that account's personal Google Drive.
-const HARDCODED_CLIENT_ID = ""; // e.g. "1234567890-abc.apps.googleusercontent.com"
+const HARDCODED_CLIENT_ID = "687580151695-a7mt3heeuflrisqheuncsgbs7kv188sp.apps.googleusercontent.com";
 
 declare global {
   interface Window {
