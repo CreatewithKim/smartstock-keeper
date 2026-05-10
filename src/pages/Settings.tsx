@@ -206,22 +206,11 @@ export default function Settings() {
                 )}
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="gdrive-client-id" className="text-xs">Google OAuth Client ID</Label>
-                <div className="flex gap-2">
-                  <Input
-                    id="gdrive-client-id"
-                    value={clientId}
-                    onChange={(e) => setClientIdState(e.target.value)}
-                    placeholder="xxxxxxxxxxxx.apps.googleusercontent.com"
-                    className="text-xs"
-                  />
-                  <Button onClick={handleSaveClientId} variant="outline" size="sm">Save</Button>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Create a Web OAuth Client at console.cloud.google.com (Drive API enabled). Add this app's URL as an authorized JavaScript origin.
+              {!clientIdConfigured && (
+                <p className="text-xs text-destructive">
+                  Google Drive backup is not configured for this app yet. The app owner needs to set <code>VITE_GOOGLE_CLIENT_ID</code>.
                 </p>
-              </div>
+              )}
 
               <Button onClick={handleDriveBackup} variant="outline" className="gap-2 w-full" disabled={backingUp}>
                 {backingUp ? <Loader2 className="h-4 w-4 animate-spin" /> : <HardDriveUpload className="h-4 w-4" />}
