@@ -1,7 +1,9 @@
 import { useState, useEffect } from "react";
 import { GlassCard } from "@/components/GlassCard";
 import { Button } from "@/components/ui/button";
-import { Database, Download, Trash2, Info, Scale, Cloud, Loader2 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Database, Download, Trash2, Info, Scale, HardDriveUpload, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
   AlertDialog,
@@ -16,8 +18,12 @@ import {
 } from "@/components/ui/alert-dialog";
 import { ScaleConfiguration } from "@/components/scale/ScaleConfiguration";
 import { ScaleConfig } from "@/hooks/useScaleConnection";
-import { backupToCloud, getLastBackupAt } from "@/services/cloudBackup";
-import { useAuth } from "@/contexts/AuthContext";
+import {
+  backupToGoogleDrive,
+  getLastDriveBackupAt,
+  getGoogleClientId,
+  setGoogleClientId,
+} from "@/services/googleDriveBackup";
 
 const DEFAULT_SCALE_CONFIG: ScaleConfig = {
   port: 'COM3',
@@ -28,22 +34,27 @@ const DEFAULT_SCALE_CONFIG: ScaleConfig = {
 
 export default function Settings() {
   const { toast } = useToast();
-  const { user } = useAuth();
   const [scaleConfig, setScaleConfig] = useState<ScaleConfig>(DEFAULT_SCALE_CONFIG);
   const [backingUp, setBackingUp] = useState(false);
-  const [lastBackup, setLastBackup] = useState<Date | null>(getLastBackupAt());
+  const [lastBackup, setLastBackup] = useState<Date | null>(getLastDriveBackupAt());
+  const [clientId, setClientIdState] = useState<string>(getGoogleClientId());
 
-  const handleCloudBackup = async () => {
-    if (!user) {
-      toast({ title: "Sign in required", description: "Please sign in to back up to the cloud.", variant: "destructive" });
+  const handleSaveClientId = () => {
+    setGoogleClientId(clientId);
+    toast({ title: "Saved", description: "Google Client ID stored on this device." });
+  };
+
+  const handleDriveBackup = async () => {
+    if (!clientId) {
+      toast({ title: "Setup required", description: "Add your Google Client ID first.", variant: "destructive" });
       return;
     }
     setBackingUp(true);
     try {
-      const { totals } = await backupToCloud();
+      const { totals, filename } = await backupToGoogleDrive();
       setLastBackup(new Date());
       const summary = Object.entries(totals).map(([k, v]) => `${v} ${k.replace("_", " ")}`).join(", ");
-      toast({ title: "Backup Complete", description: `Uploaded ${summary}.` });
+      toast({ title: "Backup Complete", description: `Uploaded ${filename} (${summary}).` });
     } catch (err: any) {
       toast({ title: "Backup Failed", description: err.message ?? "Unknown error", variant: "destructive" });
     } finally {
