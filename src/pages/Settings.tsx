@@ -36,16 +36,11 @@ export default function Settings() {
   const [scaleConfig, setScaleConfig] = useState<ScaleConfig>(DEFAULT_SCALE_CONFIG);
   const [backingUp, setBackingUp] = useState(false);
   const [lastBackup, setLastBackup] = useState<Date | null>(getLastDriveBackupAt());
-  const [clientId, setClientIdState] = useState<string>(getGoogleClientId());
-
-  const handleSaveClientId = () => {
-    setGoogleClientId(clientId);
-    toast({ title: "Saved", description: "Google Client ID stored on this device." });
-  };
+  const clientIdConfigured = Boolean(getGoogleClientId());
 
   const handleDriveBackup = async () => {
-    if (!clientId) {
-      toast({ title: "Setup required", description: "Add your Google Client ID first.", variant: "destructive" });
+    if (!clientIdConfigured) {
+      toast({ title: "Not configured", description: "Google Drive backup is not set up for this app yet.", variant: "destructive" });
       return;
     }
     setBackingUp(true);
