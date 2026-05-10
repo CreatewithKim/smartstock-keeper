@@ -24,6 +24,10 @@ const navItems = [
   { icon: Settings, label: "Settings", path: "/settings" },
 ];
 
+// Limited set shown on mobile when authenticated
+const mobileNavPaths = new Set(["/products", "/sales", "/avenues", "/expenses", "/analytics", "/reports"]);
+const mobileNavItems = navItems.filter((i) => mobileNavPaths.has(i.path));
+
 export const Layout = ({ children }: LayoutProps) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { user, signOut } = useAuth();
