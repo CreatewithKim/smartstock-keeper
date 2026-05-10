@@ -81,8 +81,22 @@ export const Layout = ({ children }: LayoutProps) => {
               </div>
             </div>
 
-            <nav className="space-y-2">
+            <nav className="hidden lg:block space-y-2">
               {navItems.map((item) => (
+                <NavLink
+                  key={item.path}
+                  to={item.path}
+                  className="flex items-center gap-3 rounded-xl px-4 py-3 text-foreground/70 transition-all hover:bg-primary/10 hover:text-primary"
+                  activeClassName="bg-primary/20 text-primary font-semibold"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  <item.icon className="h-5 w-5" />
+                  <span>{item.label}</span>
+                </NavLink>
+              ))}
+            </nav>
+            <nav className="lg:hidden space-y-2">
+              {mobileNavItems.map((item) => (
                 <NavLink
                   key={item.path}
                   to={item.path}
