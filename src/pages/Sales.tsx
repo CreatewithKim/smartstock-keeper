@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/select";
 import { format } from "date-fns";
 import { Textarea } from "@/components/ui/textarea";
+import { SalesHistory } from "@/components/scale/SalesHistory";
 
 export default function Sales() {
   const { toast } = useToast();
