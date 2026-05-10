@@ -8,8 +8,13 @@ import {
 } from "./db";
 
 const SCOPE = "https://www.googleapis.com/auth/drive.file";
-const CLIENT_ID_KEY = "googleDriveClientId";
 const LAST_BACKUP_KEY = "lastGoogleDriveBackup";
+
+// App-wide Google OAuth Client ID. Set once via VITE_GOOGLE_CLIENT_ID env var,
+// or hardcode below. End users do NOT need to configure anything — they just
+// authorize their own Google account at backup time and the file is uploaded
+// to that account's personal Google Drive.
+const HARDCODED_CLIENT_ID = ""; // e.g. "1234567890-abc.apps.googleusercontent.com"
 
 declare global {
   interface Window {
@@ -18,11 +23,11 @@ declare global {
 }
 
 export function getGoogleClientId(): string {
-  return localStorage.getItem(CLIENT_ID_KEY) ?? "";
-}
-
-export function setGoogleClientId(id: string) {
-  localStorage.setItem(CLIENT_ID_KEY, id.trim());
+  return (
+    (import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined) ||
+    HARDCODED_CLIENT_ID ||
+    ""
+  );
 }
 
 export function getLastDriveBackupAt(): Date | null {
