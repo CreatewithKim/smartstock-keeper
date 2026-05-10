@@ -22,7 +22,6 @@ import {
   backupToGoogleDrive,
   getLastDriveBackupAt,
   getGoogleClientId,
-  setGoogleClientId,
 } from "@/services/googleDriveBackup";
 
 const DEFAULT_SCALE_CONFIG: ScaleConfig = {
