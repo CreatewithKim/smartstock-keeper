@@ -20,6 +20,7 @@ export default function Analytics() {
   useEffect(() => {
     loadAll();
   }, []);
+  useReloadOnCloudChange(loadAll);
 
   const loadAll = async () => {
     try {

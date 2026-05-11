@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useReloadOnCloudChange } from "@/hooks/useReloadOnCloudChange";
 import { Truck, Plus, Calendar, Pencil, Trash2 } from "lucide-react";
 import { GlassCard } from "@/components/GlassCard";
 import { Button } from "@/components/ui/button";
@@ -41,6 +42,7 @@ export default function ProductsOut() {
   useEffect(() => {
     loadData();
   }, []);
+  useReloadOnCloudChange(loadData);
 
   const loadData = async () => {
     try {
