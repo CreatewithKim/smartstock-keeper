@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { useReloadOnCloudChange } from "@/hooks/useReloadOnCloudChange";
 import { FileDown, Calendar, TrendingUp, Smartphone, Wallet, Banknote } from "lucide-react";
 import { GlassCard } from "@/components/GlassCard";
 import { Button } from "@/components/ui/button";
@@ -28,7 +27,6 @@ export default function Reports() {
   useEffect(() => {
     loadData();
   }, []);
-  useReloadOnCloudChange(loadData);
 
   const loadData = async () => {
     try {

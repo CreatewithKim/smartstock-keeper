@@ -6,7 +6,6 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { Layout } from "./components/Layout";
 import { AuthProvider } from "./contexts/AuthContext";
 import { ProtectedRoute } from "./components/ProtectedRoute";
-import { useCloudSync } from "./hooks/useCloudSync";
 import Dashboard from "./pages/Dashboard";
 import Products from "./pages/Products";
 import ProductsOut from "./pages/ProductsOut";
@@ -22,11 +21,6 @@ import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
-const CloudSyncBoot = () => {
-  useCloudSync();
-  return null;
-};
-
 const Protected = ({ children }: { children: React.ReactNode }) => (
   <ProtectedRoute>
     <Layout>{children}</Layout>
@@ -41,7 +35,6 @@ const App = () => {
         <Sonner />
         <BrowserRouter>
           <AuthProvider>
-            <CloudSyncBoot />
             <Routes>
               <Route path="/auth" element={<Auth />} />
               <Route path="/" element={<Protected><Dashboard /></Protected>} />

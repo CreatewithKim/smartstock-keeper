@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { useReloadOnCloudChange } from "@/hooks/useReloadOnCloudChange";
 import {
   Receipt,
   Plus,
@@ -71,7 +70,6 @@ export default function Expenses() {
   useEffect(() => {
     loadData();
   }, []);
-  useReloadOnCloudChange(loadData);
 
   const loadData = async () => {
     try {

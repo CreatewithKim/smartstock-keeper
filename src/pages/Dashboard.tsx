@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { useReloadOnCloudChange } from "@/hooks/useReloadOnCloudChange";
 import { Package, TrendingDown, DollarSign, AlertTriangle, ShoppingCart, FileText } from "lucide-react";
 import { StatCard } from "@/components/StatCard";
 import { GlassCard } from "@/components/GlassCard";
@@ -20,7 +19,6 @@ export default function Dashboard() {
   useEffect(() => {
     loadDashboardData();
   }, []);
-  useReloadOnCloudChange(loadDashboardData);
 
   const loadDashboardData = async () => {
     try {

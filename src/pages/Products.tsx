@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { useReloadOnCloudChange } from "@/hooks/useReloadOnCloudChange";
 import { Plus, Search, Edit, Trash2, Package as PackageIcon, TrendingUp } from "lucide-react";
 import { GlassCard } from "@/components/GlassCard";
 import { Button } from "@/components/ui/button";
@@ -52,7 +51,6 @@ export default function Products() {
   useEffect(() => {
     loadProducts();
   }, []);
-  useReloadOnCloudChange(loadProducts);
 
   const loadProducts = async () => {
     try {
