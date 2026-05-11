@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useReloadOnCloudChange } from "@/hooks/useReloadOnCloudChange";
 import { GlassCard } from "@/components/GlassCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -39,6 +40,7 @@ export default function Avenues() {
   useEffect(() => {
     loadData();
   }, [selectedDate]);
+  useReloadOnCloudChange(loadData);
 
   const loadData = async () => {
     try {

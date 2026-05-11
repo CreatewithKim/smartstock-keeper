@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from "react";
+import { useReloadOnCloudChange } from "@/hooks/useReloadOnCloudChange";
 import { productDB, salesDB, stockIntakeDB, productOutDB, excessSalesDB, Product, Sale, StockIntake, ProductOut, ExcessSale } from "@/services/db";
 import { GlassCard } from "@/components/GlassCard";
 import { StatCard } from "@/components/StatCard";
@@ -19,6 +20,7 @@ export default function Analytics() {
   useEffect(() => {
     loadAll();
   }, []);
+  useReloadOnCloudChange(loadAll);
 
   const loadAll = async () => {
     try {

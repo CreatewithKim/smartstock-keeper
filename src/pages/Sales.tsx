@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useReloadOnCloudChange } from "@/hooks/useReloadOnCloudChange";
 import { ShoppingCart, CalendarIcon, Plus, Pencil, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Calendar } from "@/components/ui/calendar";
@@ -54,6 +55,7 @@ export default function Sales() {
   useEffect(() => {
     loadData();
   }, []);
+  useReloadOnCloudChange(loadData);
 
   const loadData = async () => {
     try {

@@ -1,4 +1,15 @@
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
+import { pushRow, deleteRow, emitDataChanged } from './cloudSync';
+
+// Fire-and-forget cloud sync helpers. Never block local IndexedDB ops.
+const syncPush = (table: any, rec: any) => {
+  pushRow(table, rec).catch(() => {});
+  emitDataChanged();
+};
+const syncDelete = (table: any, localId: number) => {
+  deleteRow(table, localId).catch(() => {});
+  emitDataChanged();
+};
 
 export interface Product {
   id?: number;
@@ -180,17 +191,22 @@ export const productDB = {
 
   async add(product: Omit<Product, 'id'>): Promise<number> {
     const db = await getDB();
-    return db.add('products', product as Product);
+    const id = await db.add('products', product as Product);
+    syncPush('products', { ...(product as Product), id });
+    return id;
   },
 
   async update(product: Product): Promise<void> {
     const db = await getDB();
-    await db.put('products', { ...product, updatedAt: new Date() });
+    const updated = { ...product, updatedAt: new Date() };
+    await db.put('products', updated);
+    syncPush('products', updated);
   },
 
   async delete(id: number): Promise<void> {
     const db = await getDB();
     await db.delete('products', id);
+    syncDelete('products', id);
   },
 
   async updateStock(id: number, quantity: number, isAddition: boolean): Promise<void> {
@@ -202,6 +218,7 @@ export const productDB = {
         : product.currentStock - quantity;
       product.updatedAt = new Date();
       await db.put('products', product);
+      syncPush('products', product);
     }
   },
 
@@ -227,10 +244,11 @@ export const stockIntakeDB = {
   async add(intake: Omit<StockIntake, 'id'>): Promise<number> {
     const db = await getDB();
     const id = await db.add('stockIntakes', intake as StockIntake);
-    
+    syncPush('stock_intakes', { ...(intake as StockIntake), id });
+
     // Update product stock
     await productDB.updateStock(intake.productId, intake.quantity, true);
-    
+
     return id;
   },
 
@@ -256,7 +274,7 @@ export const salesDB = {
   async add(sale: Omit<Sale, 'id'>): Promise<number> {
     const db = await getDB();
     const product = await productDB.getById(sale.productId);
-    
+
     if (!product) {
       throw new Error('Product not found');
     }
@@ -266,10 +284,11 @@ export const salesDB = {
     }
 
     const id = await db.add('sales', sale as Sale);
-    
+    syncPush('sales', { ...(sale as Sale), id });
+
     // Update product stock
     await productDB.updateStock(sale.productId, sale.quantity, false);
-    
+
     return id;
   },
 
@@ -313,17 +332,21 @@ export const excessSalesDB = {
 
   async add(excessSale: Omit<ExcessSale, 'id'>): Promise<number> {
     const db = await getDB();
-    return db.add('excessSales', excessSale as ExcessSale);
+    const id = await db.add('excessSales', excessSale as ExcessSale);
+    syncPush('excess_sales', { ...(excessSale as ExcessSale), id });
+    return id;
   },
 
   async update(excessSale: ExcessSale): Promise<void> {
     const db = await getDB();
     await db.put('excessSales', excessSale);
+    syncPush('excess_sales', excessSale);
   },
 
   async delete(id: number): Promise<void> {
     const db = await getDB();
     await db.delete('excessSales', id);
+    syncDelete('excess_sales', id);
   },
 
   async getByDateRange(startDate: Date, endDate: Date): Promise<ExcessSale[]> {
@@ -372,7 +395,7 @@ export const productOutDB = {
   async add(productOut: Omit<ProductOut, 'id'>): Promise<number> {
     const db = await getDB();
     const product = await productDB.getById(productOut.productId);
-    
+
     if (!product) {
       throw new Error('Product not found');
     }
@@ -382,21 +405,24 @@ export const productOutDB = {
     }
 
     const id = await db.add('productsOut', productOut as ProductOut);
-    
+    syncPush('products_out', { ...(productOut as ProductOut), id });
+
     // Update product stock
     await productDB.updateStock(productOut.productId, productOut.quantity, false);
-    
+
     return id;
   },
 
   async update(productOut: ProductOut): Promise<void> {
     const db = await getDB();
     await db.put('productsOut', productOut);
+    syncPush('products_out', productOut);
   },
 
   async delete(id: number): Promise<void> {
     const db = await getDB();
     await db.delete('productsOut', id);
+    syncDelete('products_out', id);
   },
 
   async getByDateRange(startDate: Date, endDate: Date): Promise<ProductOut[]> {
@@ -434,17 +460,21 @@ export const expenseDB = {
 
   async add(expense: Omit<Expense, 'id'>): Promise<number> {
     const db = await getDB();
-    return db.add('expenses', expense as Expense);
+    const id = await db.add('expenses', expense as Expense);
+    syncPush('expenses', { ...(expense as Expense), id });
+    return id;
   },
 
   async update(expense: Expense): Promise<void> {
     const db = await getDB();
     await db.put('expenses', expense);
+    syncPush('expenses', expense);
   },
 
   async delete(id: number): Promise<void> {
     const db = await getDB();
     await db.delete('expenses', id);
+    syncDelete('expenses', id);
   },
 
   async getByDateRange(startDate: Date, endDate: Date): Promise<Expense[]> {
