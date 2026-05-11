@@ -41,6 +41,7 @@ const App = () => {
         <Sonner />
         <BrowserRouter>
           <AuthProvider>
+            <CloudSyncBoot />
             <Routes>
               <Route path="/auth" element={<Auth />} />
               <Route path="/" element={<Protected><Dashboard /></Protected>} />
