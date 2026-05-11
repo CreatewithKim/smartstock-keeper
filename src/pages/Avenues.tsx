@@ -40,6 +40,7 @@ export default function Avenues() {
   useEffect(() => {
     loadData();
   }, [selectedDate]);
+  useReloadOnCloudChange(loadData);
 
   const loadData = async () => {
     try {
