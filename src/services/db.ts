@@ -1,4 +1,15 @@
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
+import { pushRow, deleteRow, emitDataChanged } from './cloudSync';
+
+// Fire-and-forget cloud sync helpers. Never block local IndexedDB ops.
+const syncPush = (table: any, rec: any) => {
+  pushRow(table, rec).catch(() => {});
+  emitDataChanged();
+};
+const syncDelete = (table: any, localId: number) => {
+  deleteRow(table, localId).catch(() => {});
+  emitDataChanged();
+};
 
 export interface Product {
   id?: number;
