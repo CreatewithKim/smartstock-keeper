@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
-import { FileDown, Calendar, TrendingUp, Smartphone, Wallet, Banknote } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { FileDown, Calendar, TrendingUp, Smartphone, Wallet, Banknote, ArrowDownCircle, ArrowUpCircle, Package as PackageIcon } from "lucide-react";
 import { GlassCard } from "@/components/GlassCard";
 import { Button } from "@/components/ui/button";
-import { productDB, salesDB, stockIntakeDB, excessSalesDB, dataUtils, Product, Sale, StockIntake, ExcessSale } from "@/services/db";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { productDB, salesDB, stockIntakeDB, excessSalesDB, productOutDB, dataUtils, Product, Sale, StockIntake, ExcessSale, ProductOut } from "@/services/db";
 import { format, startOfWeek, startOfMonth, endOfWeek, endOfMonth } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 
