@@ -22,8 +22,10 @@ export default function Reports() {
   const [sales, setSales] = useState<Sale[]>([]);
   const [intakes, setIntakes] = useState<StockIntake[]>([]);
   const [excessSales, setExcessSales] = useState<ExcessSale[]>([]);
+  const [productsOut, setProductsOut] = useState<ProductOut[]>([]);
   const [avenueRecords, setAvenueRecords] = useState<AvenueRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [movementRange, setMovementRange] = useState<"week" | "month" | "all">("month");
 
   useEffect(() => {
     loadData();
@@ -31,16 +33,19 @@ export default function Reports() {
 
   const loadData = async () => {
     try {
-      const [productsData, salesData, intakesData, excessData] = await Promise.all([
+      const [productsData, salesData, intakesData, excessData, productsOutData] = await Promise.all([
         productDB.getAll(),
         salesDB.getAll(),
         stockIntakeDB.getAll(),
         excessSalesDB.getAll(),
+        productOutDB.getAll(),
       ]);
       setProducts(productsData);
       setSales(salesData);
       setIntakes(intakesData);
       setExcessSales(excessData);
+      setProductsOut(productsOutData);
+
 
       // Load avenue records from localStorage
       const storedRecords = localStorage.getItem(AVENUES_STORAGE_KEY);
