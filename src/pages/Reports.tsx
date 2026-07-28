@@ -141,6 +141,50 @@ export default function Reports() {
 
   const lowStockProducts = products.filter((p) => p.currentStock <= p.lowStockThreshold);
 
+  // Product movement (stock in vs stock out) per product for selected range
+  const productMovement = useMemo(() => {
+    let start: Date | null = null;
+    let end: Date | null = null;
+    if (movementRange === "week") {
+      start = startOfWeek(new Date(), { weekStartsOn: 1 });
+      end = endOfWeek(new Date(), { weekStartsOn: 1 });
+    } else if (movementRange === "month") {
+      start = startOfMonth(new Date());
+      end = endOfMonth(new Date());
+    }
+    const inRange = (d: Date) => (!start || !end ? true : d >= start && d <= end);
+
+    return products
+      .map((p) => {
+        const stockIn = intakes
+          .filter((i) => i.productId === p.id && inRange(i.date))
+          .reduce((s, i) => s + i.quantity, 0);
+        const soldQty = sales
+          .filter((s) => s.productId === p.id && inRange(s.date))
+          .reduce((s, x) => s + x.quantity, 0);
+        const soldRevenue = sales
+          .filter((s) => s.productId === p.id && inRange(s.date))
+          .reduce((s, x) => s + x.totalAmount, 0);
+        const distributedQty = productsOut
+          .filter((o) => o.productId === p.id && inRange(o.date))
+          .reduce((s, o) => s + o.quantity, 0);
+        const stockOut = soldQty + distributedQty;
+        const net = stockIn - stockOut;
+        return {
+          product: p,
+          stockIn,
+          soldQty,
+          soldRevenue,
+          distributedQty,
+          stockOut,
+          net,
+        };
+      })
+      .filter((r) => r.stockIn > 0 || r.stockOut > 0)
+      .sort((a, b) => b.stockOut - a.stockOut);
+  }, [products, intakes, sales, productsOut, movementRange]);
+
+
   const handleExport = async (type: "products" | "sales" | "intakes") => {
     try {
       const csv = await dataUtils.exportToCSV(type);
