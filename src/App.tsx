@@ -4,8 +4,6 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { Layout } from "./components/Layout";
-import { AuthProvider } from "./contexts/AuthContext";
-import { ProtectedRoute } from "./components/ProtectedRoute";
 import Dashboard from "./pages/Dashboard";
 import Products from "./pages/Products";
 import ProductsOut from "./pages/ProductsOut";
@@ -16,15 +14,12 @@ import Settings from "./pages/Settings";
 import ScaleIntegration from "./pages/ScaleIntegration";
 import Analytics from "./pages/Analytics";
 import Expenses from "./pages/Expenses";
-import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
-const Protected = ({ children }: { children: React.ReactNode }) => (
-  <ProtectedRoute>
-    <Layout>{children}</Layout>
-  </ProtectedRoute>
+const Wrapped = ({ children }: { children: React.ReactNode }) => (
+  <Layout>{children}</Layout>
 );
 
 const App = () => {
@@ -34,22 +29,19 @@ const App = () => {
         <Toaster />
         <Sonner />
         <BrowserRouter>
-          <AuthProvider>
-            <Routes>
-              <Route path="/auth" element={<Auth />} />
-              <Route path="/" element={<Protected><Dashboard /></Protected>} />
-              <Route path="/products" element={<Protected><Products /></Protected>} />
-              <Route path="/products-out" element={<Protected><ProductsOut /></Protected>} />
-              <Route path="/sales" element={<Protected><Sales /></Protected>} />
-              <Route path="/avenues" element={<Protected><Avenues /></Protected>} />
-              <Route path="/expenses" element={<Protected><Expenses /></Protected>} />
-              <Route path="/scale" element={<Protected><ScaleIntegration /></Protected>} />
-              <Route path="/analytics" element={<Protected><Analytics /></Protected>} />
-              <Route path="/reports" element={<Protected><Reports /></Protected>} />
-              <Route path="/settings" element={<Protected><Settings /></Protected>} />
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </AuthProvider>
+          <Routes>
+            <Route path="/" element={<Wrapped><Dashboard /></Wrapped>} />
+            <Route path="/products" element={<Wrapped><Products /></Wrapped>} />
+            <Route path="/products-out" element={<Wrapped><ProductsOut /></Wrapped>} />
+            <Route path="/sales" element={<Wrapped><Sales /></Wrapped>} />
+            <Route path="/avenues" element={<Wrapped><Avenues /></Wrapped>} />
+            <Route path="/expenses" element={<Wrapped><Expenses /></Wrapped>} />
+            <Route path="/scale" element={<Wrapped><ScaleIntegration /></Wrapped>} />
+            <Route path="/analytics" element={<Wrapped><Analytics /></Wrapped>} />
+            <Route path="/reports" element={<Wrapped><Reports /></Wrapped>} />
+            <Route path="/settings" element={<Wrapped><Settings /></Wrapped>} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
         </BrowserRouter>
       </TooltipProvider>
     </QueryClientProvider>
