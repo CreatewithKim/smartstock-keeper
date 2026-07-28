@@ -383,6 +383,72 @@ export default function Reports() {
         )}
       </GlassCard>
 
+      {/* Product Movement */}
+      <GlassCard>
+        <div className="flex flex-col gap-3 mb-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-xl font-semibold text-foreground">Product Movement</h2>
+            <p className="text-sm text-muted-foreground">Stock in vs stock out per product</p>
+          </div>
+          <Tabs value={movementRange} onValueChange={(v) => setMovementRange(v as "week" | "month" | "all")}>
+            <TabsList>
+              <TabsTrigger value="week">This Week</TabsTrigger>
+              <TabsTrigger value="month">This Month</TabsTrigger>
+              <TabsTrigger value="all">All Time</TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
+
+        {productMovement.length > 0 ? (
+          <div className="space-y-3">
+            {productMovement.map(({ product, stockIn, soldQty, soldRevenue, distributedQty, stockOut, net }) => (
+              <div key={product.id} className="rounded-lg bg-primary/5 p-4">
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <PackageIcon className="h-4 w-4 text-primary" />
+                    <div>
+                      <p className="font-medium text-foreground">{product.name}</p>
+                      <p className="text-xs text-muted-foreground">{product.category || "Uncategorized"}</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className={`text-sm font-semibold ${net >= 0 ? "text-green-500" : "text-destructive"}`}>
+                      Net: {net >= 0 ? "+" : ""}{net.toFixed(2)}
+                    </p>
+                    <p className="text-xs text-muted-foreground">Current: {product.currentStock.toFixed(2)}</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                  <div className="rounded-md bg-background/40 p-2">
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <ArrowDownCircle className="h-3 w-3 text-green-500" /> Stock In
+                    </div>
+                    <p className="font-semibold text-foreground">+{stockIn.toFixed(2)}</p>
+                  </div>
+                  <div className="rounded-md bg-background/40 p-2">
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <ArrowUpCircle className="h-3 w-3 text-destructive" /> Stock Out
+                    </div>
+                    <p className="font-semibold text-foreground">-{stockOut.toFixed(2)}</p>
+                  </div>
+                  <div className="rounded-md bg-background/40 p-2">
+                    <p className="text-xs text-muted-foreground">Sold</p>
+                    <p className="font-semibold text-foreground">{soldQty.toFixed(2)}</p>
+                    <p className="text-xs text-primary">KSh {soldRevenue.toFixed(2)}</p>
+                  </div>
+                  <div className="rounded-md bg-background/40 p-2">
+                    <p className="text-xs text-muted-foreground">Distributed</p>
+                    <p className="font-semibold text-foreground">{distributedQty.toFixed(2)}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-center text-muted-foreground py-4">No product movement in this period</p>
+        )}
+      </GlassCard>
+
       {/* Current Stock Levels */}
       <GlassCard>
         <div className="flex items-center justify-between mb-4">
