@@ -97,7 +97,7 @@ interface SmartStockDB extends DBSchema {
 
 let dbInstance: IDBPDatabase<SmartStockDB> | null = null;
 
-async function getDB() {
+export async function getDB() {
   if (dbInstance) return dbInstance;
 
   dbInstance = await openDB<SmartStockDB>('smartstock-db', 4, {
