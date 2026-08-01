@@ -1,11 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
-import { FileDown, Calendar, TrendingUp, Smartphone, Wallet, Banknote, ArrowDownCircle, ArrowUpCircle, Package as PackageIcon } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { FileDown, Calendar, TrendingUp, Smartphone, Wallet, Banknote, ArrowDownCircle, ArrowUpCircle, Package as PackageIcon, DatabaseBackup, Upload, Loader2 } from "lucide-react";
 import { GlassCard } from "@/components/GlassCard";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { productDB, salesDB, stockIntakeDB, excessSalesDB, productOutDB, dataUtils, Product, Sale, StockIntake, ExcessSale, ProductOut } from "@/services/db";
+import { downloadBackup, downloadFile, restoreBackup } from "@/services/localBackup";
 import { format, startOfWeek, startOfMonth, endOfWeek, endOfMonth } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
+
 
 interface AvenueRecord {
   mpesa: number;
@@ -26,6 +28,9 @@ export default function Reports() {
   const [avenueRecords, setAvenueRecords] = useState<AvenueRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [movementRange, setMovementRange] = useState<"week" | "month" | "all">("month");
+  const [backingUp, setBackingUp] = useState(false);
+  const [restoring, setRestoring] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     loadData();
@@ -203,6 +208,66 @@ export default function Reports() {
       });
     }
   };
+
+  const escapeCsv = (value: string | number) => {
+    const s = String(value ?? "");
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+
+  const handleExportMovement = () => {
+    if (productMovement.length === 0) {
+      toast({ title: "Nothing to export", description: "No product movement in this period", variant: "destructive" });
+      return;
+    }
+    const headers = ["Product", "Category", "Stock In (Kg)", "Stock Out (Kg)", "Sold (Kg)", "Sales Revenue (KSh)", "Distributed (Kg)", "Net Change (Kg)", "Current Stock (Kg)"];
+    const rows = productMovement.map(({ product, stockIn, soldQty, soldRevenue, distributedQty, stockOut, net }) =>
+      [
+        product.name,
+        product.category || "Uncategorized",
+        stockIn.toFixed(2),
+        stockOut.toFixed(2),
+        soldQty.toFixed(2),
+        soldRevenue.toFixed(2),
+        distributedQty.toFixed(2),
+        net.toFixed(2),
+        product.currentStock.toFixed(2),
+      ].map(escapeCsv).join(","),
+    );
+    const csv = [headers.map(escapeCsv).join(","), ...rows].join("\n");
+    downloadFile(csv, `product-movement-${movementRange}-${format(new Date(), "yyyy-MM-dd")}.csv`, "text/csv");
+    toast({ title: "Exported", description: "Product movement CSV downloaded" });
+  };
+
+  const handleBackup = async () => {
+    setBackingUp(true);
+    try {
+      const { filename, totals } = await downloadBackup();
+      const summary = Object.entries(totals).map(([k, v]) => `${v} ${k}`).join(", ");
+      toast({ title: "Backup downloaded", description: `${filename} (${summary})` });
+    } catch (error: any) {
+      toast({ title: "Backup failed", description: error?.message ?? "Unknown error", variant: "destructive" });
+    } finally {
+      setBackingUp(false);
+    }
+  };
+
+  const handleRestoreFile = async (file: File | undefined) => {
+    if (!file) return;
+    setRestoring(true);
+    try {
+      const totals = await restoreBackup(file, "replace");
+      const summary = Object.entries(totals).map(([k, v]) => `${v} ${k}`).join(", ");
+      await loadData();
+      toast({ title: "Data restored", description: summary });
+    } catch (error: any) {
+      toast({ title: "Restore failed", description: error?.message ?? "Unknown error", variant: "destructive" });
+    } finally {
+      setRestoring(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+
 
   if (loading) {
     return (
@@ -383,6 +448,42 @@ export default function Reports() {
         )}
       </GlassCard>
 
+      {/* Backup & Restore */}
+      <GlassCard>
+        <div className="flex items-start gap-4 mb-4">
+          <div className="rounded-xl bg-primary/10 p-3">
+            <DatabaseBackup className="h-6 w-6 text-primary" />
+          </div>
+          <div>
+            <h2 className="text-xl font-semibold text-foreground">Backup &amp; Restore</h2>
+            <p className="text-sm text-muted-foreground">
+              Download a full backup of all your data, or re-upload a previously downloaded backup file.
+            </p>
+          </div>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Button onClick={handleBackup} variant="outline" className="gap-2" disabled={backingUp}>
+            {backingUp ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
+            {backingUp ? "Preparing..." : "Download Backup"}
+          </Button>
+          <Button onClick={() => fileInputRef.current?.click()} variant="outline" className="gap-2" disabled={restoring}>
+            {restoring ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+            {restoring ? "Restoring..." : "Upload Backup"}
+          </Button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="application/json,.json"
+            className="hidden"
+            onChange={(e) => handleRestoreFile(e.target.files?.[0])}
+          />
+        </div>
+        <p className="text-xs text-muted-foreground mt-3">
+          Uploading a backup replaces the current data on this device with the contents of the file.
+        </p>
+      </GlassCard>
+
+
       {/* Product Movement */}
       <GlassCard>
         <div className="flex flex-col gap-3 mb-4 sm:flex-row sm:items-center sm:justify-between">
@@ -390,14 +491,21 @@ export default function Reports() {
             <h2 className="text-xl font-semibold text-foreground">Product Movement</h2>
             <p className="text-sm text-muted-foreground">Stock in vs stock out per product</p>
           </div>
-          <Tabs value={movementRange} onValueChange={(v) => setMovementRange(v as "week" | "month" | "all")}>
-            <TabsList>
-              <TabsTrigger value="week">This Week</TabsTrigger>
-              <TabsTrigger value="month">This Month</TabsTrigger>
-              <TabsTrigger value="all">All Time</TabsTrigger>
-            </TabsList>
-          </Tabs>
+          <div className="flex flex-wrap items-center gap-2">
+            <Tabs value={movementRange} onValueChange={(v) => setMovementRange(v as "week" | "month" | "all")}>
+              <TabsList>
+                <TabsTrigger value="week">This Week</TabsTrigger>
+                <TabsTrigger value="month">This Month</TabsTrigger>
+                <TabsTrigger value="all">All Time</TabsTrigger>
+              </TabsList>
+            </Tabs>
+            <Button onClick={handleExportMovement} variant="outline" className="gap-2">
+              <FileDown className="h-4 w-4" />
+              Export CSV
+            </Button>
+          </div>
         </div>
+
 
         {productMovement.length > 0 ? (
           <div className="space-y-3">
