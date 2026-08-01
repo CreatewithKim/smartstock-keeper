@@ -455,14 +455,21 @@ export default function Reports() {
             <h2 className="text-xl font-semibold text-foreground">Product Movement</h2>
             <p className="text-sm text-muted-foreground">Stock in vs stock out per product</p>
           </div>
-          <Tabs value={movementRange} onValueChange={(v) => setMovementRange(v as "week" | "month" | "all")}>
-            <TabsList>
-              <TabsTrigger value="week">This Week</TabsTrigger>
-              <TabsTrigger value="month">This Month</TabsTrigger>
-              <TabsTrigger value="all">All Time</TabsTrigger>
-            </TabsList>
-          </Tabs>
+          <div className="flex flex-wrap items-center gap-2">
+            <Tabs value={movementRange} onValueChange={(v) => setMovementRange(v as "week" | "month" | "all")}>
+              <TabsList>
+                <TabsTrigger value="week">This Week</TabsTrigger>
+                <TabsTrigger value="month">This Month</TabsTrigger>
+                <TabsTrigger value="all">All Time</TabsTrigger>
+              </TabsList>
+            </Tabs>
+            <Button onClick={handleExportMovement} variant="outline" className="gap-2">
+              <FileDown className="h-4 w-4" />
+              Export CSV
+            </Button>
+          </div>
         </div>
+
 
         {productMovement.length > 0 ? (
           <div className="space-y-3">
