@@ -1,11 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
-import { FileDown, Calendar, TrendingUp, Smartphone, Wallet, Banknote, ArrowDownCircle, ArrowUpCircle, Package as PackageIcon } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { FileDown, Calendar, TrendingUp, Smartphone, Wallet, Banknote, ArrowDownCircle, ArrowUpCircle, Package as PackageIcon, DatabaseBackup, Upload, Loader2 } from "lucide-react";
 import { GlassCard } from "@/components/GlassCard";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { productDB, salesDB, stockIntakeDB, excessSalesDB, productOutDB, dataUtils, Product, Sale, StockIntake, ExcessSale, ProductOut } from "@/services/db";
+import { downloadBackup, downloadFile, restoreBackup } from "@/services/localBackup";
 import { format, startOfWeek, startOfMonth, endOfWeek, endOfMonth } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
+
 
 interface AvenueRecord {
   mpesa: number;
