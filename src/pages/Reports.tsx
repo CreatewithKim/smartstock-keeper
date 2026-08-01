@@ -28,6 +28,9 @@ export default function Reports() {
   const [avenueRecords, setAvenueRecords] = useState<AvenueRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [movementRange, setMovementRange] = useState<"week" | "month" | "all">("month");
+  const [backingUp, setBackingUp] = useState(false);
+  const [restoring, setRestoring] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     loadData();
