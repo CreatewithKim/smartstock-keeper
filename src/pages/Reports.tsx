@@ -448,6 +448,42 @@ export default function Reports() {
         )}
       </GlassCard>
 
+      {/* Backup & Restore */}
+      <GlassCard>
+        <div className="flex items-start gap-4 mb-4">
+          <div className="rounded-xl bg-primary/10 p-3">
+            <DatabaseBackup className="h-6 w-6 text-primary" />
+          </div>
+          <div>
+            <h2 className="text-xl font-semibold text-foreground">Backup &amp; Restore</h2>
+            <p className="text-sm text-muted-foreground">
+              Download a full backup of all your data, or re-upload a previously downloaded backup file.
+            </p>
+          </div>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Button onClick={handleBackup} variant="outline" className="gap-2" disabled={backingUp}>
+            {backingUp ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
+            {backingUp ? "Preparing..." : "Download Backup"}
+          </Button>
+          <Button onClick={() => fileInputRef.current?.click()} variant="outline" className="gap-2" disabled={restoring}>
+            {restoring ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+            {restoring ? "Restoring..." : "Upload Backup"}
+          </Button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="application/json,.json"
+            className="hidden"
+            onChange={(e) => handleRestoreFile(e.target.files?.[0])}
+          />
+        </div>
+        <p className="text-xs text-muted-foreground mt-3">
+          Uploading a backup replaces the current data on this device with the contents of the file.
+        </p>
+      </GlassCard>
+
+
       {/* Product Movement */}
       <GlassCard>
         <div className="flex flex-col gap-3 mb-4 sm:flex-row sm:items-center sm:justify-between">
