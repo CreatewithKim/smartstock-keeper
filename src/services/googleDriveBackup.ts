@@ -8,6 +8,8 @@ import {
 } from "./db";
 
 const SCOPE = "https://www.googleapis.com/auth/drive.file";
+import { backupToCsv } from "./localBackup";
+
 const LAST_BACKUP_KEY = "lastGoogleDriveBackup";
 
 // App-wide Google OAuth Client ID. Set once via VITE_GOOGLE_CLIENT_ID env var,
@@ -91,16 +93,16 @@ async function gatherSnapshot() {
   };
 }
 
-async function uploadJson(token: string, filename: string, json: string) {
+async function uploadCsv(token: string, filename: string, csv: string) {
   const boundary = "smartstock_" + Math.random().toString(36).slice(2);
-  const metadata = { name: filename, mimeType: "application/json" };
+  const metadata = { name: filename, mimeType: "text/csv" };
   const body =
     `--${boundary}\r\n` +
     `Content-Type: application/json; charset=UTF-8\r\n\r\n` +
     `${JSON.stringify(metadata)}\r\n` +
     `--${boundary}\r\n` +
-    `Content-Type: application/json\r\n\r\n` +
-    `${json}\r\n` +
+    `Content-Type: text/csv\r\n\r\n` +
+    `${csv}\r\n` +
     `--${boundary}--`;
 
   const res = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart", {
@@ -123,8 +125,8 @@ export async function backupToGoogleDrive(): Promise<{ filename: string; totals:
   if (!clientId) throw new Error("Google Client ID not configured. Add it in Settings.");
   const token = await requestAccessToken(clientId);
   const snapshot = await gatherSnapshot();
-  const filename = `smartstock-backup-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
-  await uploadJson(token, filename, JSON.stringify(snapshot, null, 2));
+  const filename = `smartstock-backup-${new Date().toISOString().replace(/[:.]/g, "-")}.csv`;
+  await uploadCsv(token, filename, backupToCsv({ app: "smartstock", version: 1, exportedAt: snapshot.exportedAt, data: snapshot.data as any, avenues: [] }));
   localStorage.setItem(LAST_BACKUP_KEY, new Date().toISOString());
   const totals = {
     products: snapshot.data.products.length,

@@ -457,7 +457,7 @@ export default function Reports() {
           <div>
             <h2 className="text-xl font-semibold text-foreground">Backup &amp; Restore</h2>
             <p className="text-sm text-muted-foreground">
-              Download a full backup of all your data, or re-upload a previously downloaded backup file.
+              Download a full backup of all your data, or re-upload a previously downloaded CSV backup file.
             </p>
           </div>
         </div>
@@ -473,7 +473,7 @@ export default function Reports() {
           <input
             ref={fileInputRef}
             type="file"
-            accept="application/json,.json"
+            accept="text/csv,.csv,application/json,.json"
             className="hidden"
             onChange={(e) => handleRestoreFile(e.target.files?.[0])}
           />
