@@ -62,6 +62,18 @@ export interface Expense {
   createdAt: Date;
 }
 
+export interface StockTake {
+  id?: number;
+  productId?: number;
+  productName: string;
+  quantity: number;
+  date: Date;
+  totalValue: number;
+  notes?: string;
+  createdAt: Date;
+}
+
+
 interface SmartStockDB extends DBSchema {
   products: {
     key: number;
