@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { FileDown, Calendar, TrendingUp, Smartphone, Wallet, Banknote, ArrowDownCircle, ArrowUpCircle, Package as PackageIcon, DatabaseBackup, Upload, Loader2 } from "lucide-react";
+import { FileDown, Calendar, TrendingUp, Smartphone, Wallet, Banknote, ArrowDownCircle, ArrowUpCircle, Package as PackageIcon, DatabaseBackup, Upload, Loader2, ClipboardList, Trash2 } from "lucide-react";
 import { GlassCard } from "@/components/GlassCard";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { productDB, salesDB, stockIntakeDB, excessSalesDB, productOutDB, dataUtils, Product, Sale, StockIntake, ExcessSale, ProductOut } from "@/services/db";
+import { productDB, salesDB, stockIntakeDB, excessSalesDB, productOutDB, stockTakeDB, dataUtils, Product, Sale, StockIntake, ExcessSale, ProductOut, StockTake } from "@/services/db";
 import { downloadBackup, downloadFile, restoreBackup } from "@/services/localBackup";
 import { format, startOfWeek, startOfMonth, endOfWeek, endOfMonth } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
+
 
 
 interface AvenueRecord {
