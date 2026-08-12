@@ -290,20 +290,34 @@ export default function Reports() {
     [stockTakes],
   );
 
+  const stockTakeSelectedProduct = useMemo(
+    () => products.find((p) => p.name.toLowerCase() === stockTakeForm.productName.trim().toLowerCase()),
+    [products, stockTakeForm.productName],
+  );
+
+  const stockTakeComputedValue = useMemo(() => {
+    const qty = parseFloat(stockTakeForm.quantity);
+    if (isNaN(qty) || !stockTakeSelectedProduct) return 0;
+    return qty * stockTakeSelectedProduct.sellingPrice;
+  }, [stockTakeForm.quantity, stockTakeSelectedProduct]);
+
   const handleAddStockTake = async (e: React.FormEvent) => {
     e.preventDefault();
     const quantity = parseFloat(stockTakeForm.quantity);
-    const totalValue = parseFloat(stockTakeForm.totalValue);
-    if (!stockTakeForm.productName.trim() || isNaN(quantity) || isNaN(totalValue)) {
-      toast({ title: "Missing details", description: "Enter item, quantity and total stock value", variant: "destructive" });
+    if (!stockTakeForm.productName.trim() || isNaN(quantity)) {
+      toast({ title: "Missing details", description: "Enter item and quantity", variant: "destructive" });
+      return;
+    }
+    if (!stockTakeSelectedProduct) {
+      toast({ title: "Unknown item", description: "Pick an existing product so the value can be computed", variant: "destructive" });
       return;
     }
     try {
       await stockTakeDB.add({
-        productName: stockTakeForm.productName.trim(),
-        productId: products.find((p) => p.name === stockTakeForm.productName.trim())?.id,
+        productName: stockTakeSelectedProduct.name,
+        productId: stockTakeSelectedProduct.id,
         quantity,
-        totalValue,
+        totalValue: stockTakeComputedValue,
         date: new Date(stockTakeForm.date),
         createdAt: new Date(),
       });
@@ -314,6 +328,7 @@ export default function Reports() {
       toast({ title: "Failed to record", description: error?.message ?? "Unknown error", variant: "destructive" });
     }
   };
+
 
   const handleDeleteStockTake = async (id?: number) => {
     if (!id) return;
