@@ -408,6 +408,113 @@ export default function Reports() {
         </GlassCard>
       </div>
 
+      {/* Stock Taking */}
+      <GlassCard>
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <div className="flex items-center gap-2">
+            <ClipboardList className="h-5 w-5 text-primary" />
+            <h2 className="text-xl font-semibold text-foreground">Stock Taking</h2>
+          </div>
+          <Button variant="outline" size="sm" onClick={handleExportStockTakes}>
+            <FileDown className="h-4 w-4 mr-2" />
+            Export CSV
+          </Button>
+        </div>
+
+        <form onSubmit={handleAddStockTake} className="grid gap-4 md:grid-cols-4 mb-6">
+          <div className="space-y-2">
+            <Label htmlFor="st-item">Item</Label>
+            <Input
+              id="st-item"
+              list="stock-take-products"
+              placeholder="Item name"
+              value={stockTakeForm.productName}
+              onChange={(e) => setStockTakeForm({ ...stockTakeForm, productName: e.target.value })}
+            />
+            <datalist id="stock-take-products">
+              {products.map((p) => (
+                <option key={p.id} value={p.name} />
+              ))}
+            </datalist>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="st-qty">Quantity per item</Label>
+            <Input
+              id="st-qty"
+              type="number"
+              step="0.01"
+              min="0"
+              placeholder="0.00"
+              value={stockTakeForm.quantity}
+              onChange={(e) => setStockTakeForm({ ...stockTakeForm, quantity: e.target.value })}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="st-date">Date Recorded</Label>
+            <Input
+              id="st-date"
+              type="date"
+              value={stockTakeForm.date}
+              onChange={(e) => setStockTakeForm({ ...stockTakeForm, date: e.target.value })}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="st-value">Total stock value (KSh)</Label>
+            <Input
+              id="st-value"
+              type="number"
+              step="0.01"
+              min="0"
+              placeholder="0.00"
+              value={stockTakeForm.totalValue}
+              onChange={(e) => setStockTakeForm({ ...stockTakeForm, totalValue: e.target.value })}
+            />
+          </div>
+          <div className="md:col-span-4">
+            <Button type="submit">Record stock take</Button>
+          </div>
+        </form>
+
+        {sortedStockTakes.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No stock taking records yet.</p>
+        ) : (
+          <div className="space-y-2">
+            {sortedStockTakes.map((record) => (
+              <div
+                key={record.id}
+                className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-lg bg-primary/5"
+              >
+                <div>
+                  <p className="font-medium text-foreground">{record.productName}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {format(new Date(record.date), "dd MMM yyyy")}
+                  </p>
+                </div>
+                <div className="flex items-center gap-6">
+                  <div className="text-right">
+                    <p className="text-xs text-muted-foreground">Quantity</p>
+                    <p className="font-medium">{record.quantity.toFixed(2)}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-muted-foreground">Total value</p>
+                    <p className="font-medium">KSh {record.totalValue.toFixed(2)}</p>
+                  </div>
+                  <Button variant="ghost" size="icon" onClick={() => handleDeleteStockTake(record.id)}>
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+            <div className="flex items-center justify-between border-t border-border pt-3 mt-2">
+              <span className="text-sm font-medium">Total stock value recorded</span>
+              <span className="font-bold text-primary">KSh {stockTakeTotalValue.toFixed(2)}</span>
+            </div>
+          </div>
+        )}
+      </GlassCard>
+
+
+
       {/* Payment Avenues Breakdown */}
       <GlassCard>
         <h2 className="text-xl font-semibold text-foreground mb-4">Payment Avenues Breakdown</h2>
