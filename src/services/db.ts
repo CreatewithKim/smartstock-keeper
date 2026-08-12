@@ -105,6 +105,11 @@ interface SmartStockDB extends DBSchema {
     value: Expense;
     indexes: { 'by-date': Date; 'by-category': string };
   };
+  stockTakes: {
+    key: number;
+    value: StockTake;
+    indexes: { 'by-date': Date };
+  };
 }
 
 let dbInstance: IDBPDatabase<SmartStockDB> | null = null;
@@ -112,7 +117,7 @@ let dbInstance: IDBPDatabase<SmartStockDB> | null = null;
 export async function getDB() {
   if (dbInstance) return dbInstance;
 
-  dbInstance = await openDB<SmartStockDB>('smartstock-db', 4, {
+  dbInstance = await openDB<SmartStockDB>('smartstock-db', 5, {
     upgrade(db, oldVersion) {
       // Products store
       if (!db.objectStoreNames.contains('products')) {
