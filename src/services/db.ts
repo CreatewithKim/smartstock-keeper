@@ -495,6 +495,29 @@ export const expenseDB = {
   },
 };
 
+// Stock take operations
+export const stockTakeDB = {
+  async getAll(): Promise<StockTake[]> {
+    const db = await getDB();
+    return db.getAll('stockTakes');
+  },
+
+  async add(stockTake: Omit<StockTake, 'id'>): Promise<number> {
+    const db = await getDB();
+    return db.add('stockTakes', stockTake as StockTake);
+  },
+
+  async update(stockTake: StockTake): Promise<void> {
+    const db = await getDB();
+    await db.put('stockTakes', stockTake);
+  },
+
+  async delete(id: number): Promise<void> {
+    const db = await getDB();
+    await db.delete('stockTakes', id);
+  },
+};
+
 // Export/Import operations
 export const dataUtils = {
   async exportToCSV(type: 'products' | 'sales' | 'intakes'): Promise<string> {
