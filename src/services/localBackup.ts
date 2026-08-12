@@ -7,6 +7,7 @@ const STORES = [
   "excessSales",
   "productsOut",
   "expenses",
+  "stockTakes",
 ] as const;
 
 type StoreName = (typeof STORES)[number];
