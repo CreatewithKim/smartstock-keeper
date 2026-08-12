@@ -280,6 +280,66 @@ export default function Reports() {
     }
   };
 
+  const sortedStockTakes = useMemo(
+    () => [...stockTakes].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
+    [stockTakes],
+  );
+
+  const stockTakeTotalValue = useMemo(
+    () => stockTakes.reduce((sum, s) => sum + (s.totalValue || 0), 0),
+    [stockTakes],
+  );
+
+  const handleAddStockTake = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const quantity = parseFloat(stockTakeForm.quantity);
+    const totalValue = parseFloat(stockTakeForm.totalValue);
+    if (!stockTakeForm.productName.trim() || isNaN(quantity) || isNaN(totalValue)) {
+      toast({ title: "Missing details", description: "Enter item, quantity and total stock value", variant: "destructive" });
+      return;
+    }
+    try {
+      await stockTakeDB.add({
+        productName: stockTakeForm.productName.trim(),
+        productId: products.find((p) => p.name === stockTakeForm.productName.trim())?.id,
+        quantity,
+        totalValue,
+        date: new Date(stockTakeForm.date),
+        createdAt: new Date(),
+      });
+      setStockTakeForm({ productName: "", quantity: "", date: format(new Date(), "yyyy-MM-dd"), totalValue: "" });
+      setStockTakes(await stockTakeDB.getAll());
+      toast({ title: "Stock take recorded" });
+    } catch (error: any) {
+      toast({ title: "Failed to record", description: error?.message ?? "Unknown error", variant: "destructive" });
+    }
+  };
+
+  const handleDeleteStockTake = async (id?: number) => {
+    if (!id) return;
+    await stockTakeDB.delete(id);
+    setStockTakes(await stockTakeDB.getAll());
+    toast({ title: "Record deleted" });
+  };
+
+  const handleExportStockTakes = () => {
+    if (sortedStockTakes.length === 0) {
+      toast({ title: "Nothing to export", description: "No stock taking records yet", variant: "destructive" });
+      return;
+    }
+    const headers = ["Item", "Quantity", "Date Recorded", "Total Stock Value (KSh)"];
+    const rows = sortedStockTakes.map((s) =>
+      [s.productName, s.quantity, format(new Date(s.date), "yyyy-MM-dd"), s.totalValue.toFixed(2)]
+        .map((v) => escapeCsv(v as string | number))
+        .join(","),
+    );
+    downloadFile(
+      [headers.map(escapeCsv).join(","), ...rows].join("\n"),
+      `stock-taking-${format(new Date(), "yyyy-MM-dd")}.csv`,
+      "text/csv",
+    );
+    toast({ title: "Exported", description: "Stock taking CSV downloaded" });
+  };
 
 
   if (loading) {
