@@ -62,6 +62,18 @@ export interface Expense {
   createdAt: Date;
 }
 
+export interface StockTake {
+  id?: number;
+  productId?: number;
+  productName: string;
+  quantity: number;
+  date: Date;
+  totalValue: number;
+  notes?: string;
+  createdAt: Date;
+}
+
+
 interface SmartStockDB extends DBSchema {
   products: {
     key: number;
@@ -93,6 +105,11 @@ interface SmartStockDB extends DBSchema {
     value: Expense;
     indexes: { 'by-date': Date; 'by-category': string };
   };
+  stockTakes: {
+    key: number;
+    value: StockTake;
+    indexes: { 'by-date': Date };
+  };
 }
 
 let dbInstance: IDBPDatabase<SmartStockDB> | null = null;
@@ -100,7 +117,7 @@ let dbInstance: IDBPDatabase<SmartStockDB> | null = null;
 export async function getDB() {
   if (dbInstance) return dbInstance;
 
-  dbInstance = await openDB<SmartStockDB>('smartstock-db', 4, {
+  dbInstance = await openDB<SmartStockDB>('smartstock-db', 5, {
     upgrade(db, oldVersion) {
       // Products store
       if (!db.objectStoreNames.contains('products')) {
@@ -160,8 +177,18 @@ export async function getDB() {
         expensesStore.createIndex('by-date', 'date');
         expensesStore.createIndex('by-category', 'category');
       }
+
+      // Stock takes store (added in version 5)
+      if (!db.objectStoreNames.contains('stockTakes')) {
+        const stockTakeStore = db.createObjectStore('stockTakes', {
+          keyPath: 'id',
+          autoIncrement: true,
+        });
+        stockTakeStore.createIndex('by-date', 'date');
+      }
     },
   });
+
 
   return dbInstance;
 }
@@ -465,6 +492,29 @@ export const expenseDB = {
     endOfDay.setDate(endOfDay.getDate() + 1);
     const expenses = await this.getByDateRange(startOfDay, endOfDay);
     return expenses.reduce((sum, e) => sum + e.amount, 0);
+  },
+};
+
+// Stock take operations
+export const stockTakeDB = {
+  async getAll(): Promise<StockTake[]> {
+    const db = await getDB();
+    return db.getAll('stockTakes');
+  },
+
+  async add(stockTake: Omit<StockTake, 'id'>): Promise<number> {
+    const db = await getDB();
+    return db.add('stockTakes', stockTake as StockTake);
+  },
+
+  async update(stockTake: StockTake): Promise<void> {
+    const db = await getDB();
+    await db.put('stockTakes', stockTake);
+  },
+
+  async delete(id: number): Promise<void> {
+    const db = await getDB();
+    await db.delete('stockTakes', id);
   },
 };
 

@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { FileDown, Calendar, TrendingUp, Smartphone, Wallet, Banknote, ArrowDownCircle, ArrowUpCircle, Package as PackageIcon, DatabaseBackup, Upload, Loader2 } from "lucide-react";
+import { FileDown, Calendar, TrendingUp, Smartphone, Wallet, Banknote, ArrowDownCircle, ArrowUpCircle, Package as PackageIcon, DatabaseBackup, Upload, Loader2, ClipboardList, Trash2 } from "lucide-react";
 import { GlassCard } from "@/components/GlassCard";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { productDB, salesDB, stockIntakeDB, excessSalesDB, productOutDB, dataUtils, Product, Sale, StockIntake, ExcessSale, ProductOut } from "@/services/db";
+import { productDB, salesDB, stockIntakeDB, excessSalesDB, productOutDB, stockTakeDB, dataUtils, Product, Sale, StockIntake, ExcessSale, ProductOut, StockTake } from "@/services/db";
 import { downloadBackup, downloadFile, restoreBackup } from "@/services/localBackup";
 import { format, startOfWeek, startOfMonth, endOfWeek, endOfMonth } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
+
 
 
 interface AvenueRecord {
@@ -25,12 +28,19 @@ export default function Reports() {
   const [intakes, setIntakes] = useState<StockIntake[]>([]);
   const [excessSales, setExcessSales] = useState<ExcessSale[]>([]);
   const [productsOut, setProductsOut] = useState<ProductOut[]>([]);
+  const [stockTakes, setStockTakes] = useState<StockTake[]>([]);
   const [avenueRecords, setAvenueRecords] = useState<AvenueRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [movementRange, setMovementRange] = useState<"week" | "month" | "all">("month");
   const [backingUp, setBackingUp] = useState(false);
   const [restoring, setRestoring] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [stockTakeForm, setStockTakeForm] = useState({
+    productName: "",
+    quantity: "",
+    date: format(new Date(), "yyyy-MM-dd"),
+    totalValue: "",
+  });
 
   useEffect(() => {
     loadData();
@@ -38,18 +48,21 @@ export default function Reports() {
 
   const loadData = async () => {
     try {
-      const [productsData, salesData, intakesData, excessData, productsOutData] = await Promise.all([
+      const [productsData, salesData, intakesData, excessData, productsOutData, stockTakesData] = await Promise.all([
         productDB.getAll(),
         salesDB.getAll(),
         stockIntakeDB.getAll(),
         excessSalesDB.getAll(),
         productOutDB.getAll(),
+        stockTakeDB.getAll(),
       ]);
       setProducts(productsData);
       setSales(salesData);
       setIntakes(intakesData);
       setExcessSales(excessData);
       setProductsOut(productsOutData);
+      setStockTakes(stockTakesData);
+
 
 
       // Load avenue records from localStorage
@@ -267,6 +280,66 @@ export default function Reports() {
     }
   };
 
+  const sortedStockTakes = useMemo(
+    () => [...stockTakes].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
+    [stockTakes],
+  );
+
+  const stockTakeTotalValue = useMemo(
+    () => stockTakes.reduce((sum, s) => sum + (s.totalValue || 0), 0),
+    [stockTakes],
+  );
+
+  const handleAddStockTake = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const quantity = parseFloat(stockTakeForm.quantity);
+    const totalValue = parseFloat(stockTakeForm.totalValue);
+    if (!stockTakeForm.productName.trim() || isNaN(quantity) || isNaN(totalValue)) {
+      toast({ title: "Missing details", description: "Enter item, quantity and total stock value", variant: "destructive" });
+      return;
+    }
+    try {
+      await stockTakeDB.add({
+        productName: stockTakeForm.productName.trim(),
+        productId: products.find((p) => p.name === stockTakeForm.productName.trim())?.id,
+        quantity,
+        totalValue,
+        date: new Date(stockTakeForm.date),
+        createdAt: new Date(),
+      });
+      setStockTakeForm({ productName: "", quantity: "", date: format(new Date(), "yyyy-MM-dd"), totalValue: "" });
+      setStockTakes(await stockTakeDB.getAll());
+      toast({ title: "Stock take recorded" });
+    } catch (error: any) {
+      toast({ title: "Failed to record", description: error?.message ?? "Unknown error", variant: "destructive" });
+    }
+  };
+
+  const handleDeleteStockTake = async (id?: number) => {
+    if (!id) return;
+    await stockTakeDB.delete(id);
+    setStockTakes(await stockTakeDB.getAll());
+    toast({ title: "Record deleted" });
+  };
+
+  const handleExportStockTakes = () => {
+    if (sortedStockTakes.length === 0) {
+      toast({ title: "Nothing to export", description: "No stock taking records yet", variant: "destructive" });
+      return;
+    }
+    const headers = ["Item", "Quantity", "Date Recorded", "Total Stock Value (KSh)"];
+    const rows = sortedStockTakes.map((s) =>
+      [s.productName, s.quantity, format(new Date(s.date), "yyyy-MM-dd"), s.totalValue.toFixed(2)]
+        .map((v) => escapeCsv(v as string | number))
+        .join(","),
+    );
+    downloadFile(
+      [headers.map(escapeCsv).join(","), ...rows].join("\n"),
+      `stock-taking-${format(new Date(), "yyyy-MM-dd")}.csv`,
+      "text/csv",
+    );
+    toast({ title: "Exported", description: "Stock taking CSV downloaded" });
+  };
 
 
   if (loading) {
@@ -334,6 +407,113 @@ export default function Reports() {
           </div>
         </GlassCard>
       </div>
+
+      {/* Stock Taking */}
+      <GlassCard>
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <div className="flex items-center gap-2">
+            <ClipboardList className="h-5 w-5 text-primary" />
+            <h2 className="text-xl font-semibold text-foreground">Stock Taking</h2>
+          </div>
+          <Button variant="outline" size="sm" onClick={handleExportStockTakes}>
+            <FileDown className="h-4 w-4 mr-2" />
+            Export CSV
+          </Button>
+        </div>
+
+        <form onSubmit={handleAddStockTake} className="grid gap-4 md:grid-cols-4 mb-6">
+          <div className="space-y-2">
+            <Label htmlFor="st-item">Item</Label>
+            <Input
+              id="st-item"
+              list="stock-take-products"
+              placeholder="Item name"
+              value={stockTakeForm.productName}
+              onChange={(e) => setStockTakeForm({ ...stockTakeForm, productName: e.target.value })}
+            />
+            <datalist id="stock-take-products">
+              {products.map((p) => (
+                <option key={p.id} value={p.name} />
+              ))}
+            </datalist>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="st-qty">Quantity per item</Label>
+            <Input
+              id="st-qty"
+              type="number"
+              step="0.01"
+              min="0"
+              placeholder="0.00"
+              value={stockTakeForm.quantity}
+              onChange={(e) => setStockTakeForm({ ...stockTakeForm, quantity: e.target.value })}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="st-date">Date Recorded</Label>
+            <Input
+              id="st-date"
+              type="date"
+              value={stockTakeForm.date}
+              onChange={(e) => setStockTakeForm({ ...stockTakeForm, date: e.target.value })}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="st-value">Total stock value (KSh)</Label>
+            <Input
+              id="st-value"
+              type="number"
+              step="0.01"
+              min="0"
+              placeholder="0.00"
+              value={stockTakeForm.totalValue}
+              onChange={(e) => setStockTakeForm({ ...stockTakeForm, totalValue: e.target.value })}
+            />
+          </div>
+          <div className="md:col-span-4">
+            <Button type="submit">Record stock take</Button>
+          </div>
+        </form>
+
+        {sortedStockTakes.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No stock taking records yet.</p>
+        ) : (
+          <div className="space-y-2">
+            {sortedStockTakes.map((record) => (
+              <div
+                key={record.id}
+                className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-lg bg-primary/5"
+              >
+                <div>
+                  <p className="font-medium text-foreground">{record.productName}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {format(new Date(record.date), "dd MMM yyyy")}
+                  </p>
+                </div>
+                <div className="flex items-center gap-6">
+                  <div className="text-right">
+                    <p className="text-xs text-muted-foreground">Quantity</p>
+                    <p className="font-medium">{record.quantity.toFixed(2)}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-muted-foreground">Total value</p>
+                    <p className="font-medium">KSh {record.totalValue.toFixed(2)}</p>
+                  </div>
+                  <Button variant="ghost" size="icon" onClick={() => handleDeleteStockTake(record.id)}>
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+            <div className="flex items-center justify-between border-t border-border pt-3 mt-2">
+              <span className="text-sm font-medium">Total stock value recorded</span>
+              <span className="font-bold text-primary">KSh {stockTakeTotalValue.toFixed(2)}</span>
+            </div>
+          </div>
+        )}
+      </GlassCard>
+
+
 
       {/* Payment Avenues Breakdown */}
       <GlassCard>

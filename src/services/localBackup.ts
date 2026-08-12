@@ -7,6 +7,7 @@ const STORES = [
   "excessSales",
   "productsOut",
   "expenses",
+  "stockTakes",
 ] as const;
 
 type StoreName = (typeof STORES)[number];
@@ -34,6 +35,7 @@ const NUMERIC_FIELDS = [
   "unitPrice",
   "totalAmount",
   "amount",
+  "totalValue",
 ];
 const BOOLEAN_FIELDS = ["isPaid"];
 
