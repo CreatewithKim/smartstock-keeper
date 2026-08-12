@@ -28,12 +28,19 @@ export default function Reports() {
   const [intakes, setIntakes] = useState<StockIntake[]>([]);
   const [excessSales, setExcessSales] = useState<ExcessSale[]>([]);
   const [productsOut, setProductsOut] = useState<ProductOut[]>([]);
+  const [stockTakes, setStockTakes] = useState<StockTake[]>([]);
   const [avenueRecords, setAvenueRecords] = useState<AvenueRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [movementRange, setMovementRange] = useState<"week" | "month" | "all">("month");
   const [backingUp, setBackingUp] = useState(false);
   const [restoring, setRestoring] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [stockTakeForm, setStockTakeForm] = useState({
+    productName: "",
+    quantity: "",
+    date: format(new Date(), "yyyy-MM-dd"),
+    totalValue: "",
+  });
 
   useEffect(() => {
     loadData();
@@ -41,18 +48,21 @@ export default function Reports() {
 
   const loadData = async () => {
     try {
-      const [productsData, salesData, intakesData, excessData, productsOutData] = await Promise.all([
+      const [productsData, salesData, intakesData, excessData, productsOutData, stockTakesData] = await Promise.all([
         productDB.getAll(),
         salesDB.getAll(),
         stockIntakeDB.getAll(),
         excessSalesDB.getAll(),
         productOutDB.getAll(),
+        stockTakeDB.getAll(),
       ]);
       setProducts(productsData);
       setSales(salesData);
       setIntakes(intakesData);
       setExcessSales(excessData);
       setProductsOut(productsOutData);
+      setStockTakes(stockTakesData);
+
 
 
       // Load avenue records from localStorage
