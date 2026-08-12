@@ -35,6 +35,7 @@ const NUMERIC_FIELDS = [
   "unitPrice",
   "totalAmount",
   "amount",
+  "totalValue",
 ];
 const BOOLEAN_FIELDS = ["isPaid"];
 
