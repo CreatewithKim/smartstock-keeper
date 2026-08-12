@@ -177,8 +177,18 @@ export async function getDB() {
         expensesStore.createIndex('by-date', 'date');
         expensesStore.createIndex('by-category', 'category');
       }
+
+      // Stock takes store (added in version 5)
+      if (!db.objectStoreNames.contains('stockTakes')) {
+        const stockTakeStore = db.createObjectStore('stockTakes', {
+          keyPath: 'id',
+          autoIncrement: true,
+        });
+        stockTakeStore.createIndex('by-date', 'date');
+      }
     },
   });
+
 
   return dbInstance;
 }
