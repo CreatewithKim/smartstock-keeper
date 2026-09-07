@@ -474,17 +474,21 @@ export default function Reports() {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="st-value">Total stock value (KSh)</Label>
+            <Label htmlFor="st-value">Total stock value (auto)</Label>
             <Input
               id="st-value"
-              type="number"
-              step="0.01"
-              min="0"
-              placeholder="0.00"
-              value={stockTakeForm.totalValue}
-              onChange={(e) => setStockTakeForm({ ...stockTakeForm, totalValue: e.target.value })}
+              readOnly
+              tabIndex={-1}
+              className="bg-muted/40"
+              value={`KSh ${stockTakeComputedValue.toFixed(2)}`}
             />
+            <p className="text-xs text-muted-foreground">
+              {stockTakeSelectedProduct
+                ? `Quantity × KSh ${stockTakeSelectedProduct.sellingPrice.toFixed(2)} selling price`
+                : "Pick an existing product to compute value"}
+            </p>
           </div>
+
           <div className="md:col-span-4">
             <Button type="submit">Record stock take</Button>
           </div>
