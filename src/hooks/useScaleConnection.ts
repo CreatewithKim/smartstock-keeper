@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useEffect, useSyncExternalStore } from 'react';
 import { toast } from '@/hooks/use-toast';
 
 export type ScaleState = 'DISCONNECTED' | 'CONNECTED' | 'WEIGHING' | 'STABLE';
@@ -28,97 +28,113 @@ const DEFAULT_CONFIG: ScaleConfig = {
 
 const STOP_MOVING_MS = 800; // display number unchanged for 0.8s = locked
 
-// ── Hook ────────────────────────────────────────────────────────────
-export function useScaleConnection() {
-  const [scaleState, setScaleState] = useState<ScaleState>('DISCONNECTED');
-  const [config, setConfig] = useState<ScaleConfig>(() => {
-    try {
-      const saved = localStorage.getItem('scaleConfig');
-      if (saved) {
-        const { middlewareUrl, ...rest } = JSON.parse(saved);
-        return { ...DEFAULT_CONFIG, ...rest };
-      }
-    } catch { /* ignore */ }
-    return DEFAULT_CONFIG;
-  });
-  const [currentWeight, setCurrentWeight] = useState<WeightData | null>(null);
-  const [stableWeight, setStableWeight] = useState<WeightData | null>(null);
-  const [lastError, setLastError] = useState<string | null>(null);
+// ── Singleton connection manager ────────────────────────────────────
+// Lives at module scope so the serial port, read loop and weight state
+// survive component unmounts (route/tab switches). The hook below only
+// subscribes to this shared state.
+interface ScaleSnapshot {
+  scaleState: ScaleState;
+  currentWeight: WeightData | null;
+  stableWeight: WeightData | null;
+  lastError: string | null;
+  config: ScaleConfig;
+}
 
-  const portRef = useRef<SerialPort | null>(null);
-  const readerRef = useRef<ReadableStreamDefaultReader<string> | null>(null);
-  const runningRef = useRef(false);
+function loadConfig(): ScaleConfig {
+  try {
+    const saved = localStorage.getItem('scaleConfig');
+    if (saved) {
+      const { middlewareUrl, ...rest } = JSON.parse(saved);
+      return { ...DEFAULT_CONFIG, ...rest };
+    }
+  } catch { /* ignore */ }
+  return DEFAULT_CONFIG;
+}
 
-  // Weight-lock tracking – locks when weight stops moving
-  const lastReadingRef = useRef<number | null>(null);
-  const lastChangedTime = useRef<number>(Date.now());
-  const stableWeightRef = useRef<WeightData | null>(null);
-  const lockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => { stableWeightRef.current = stableWeight; }, [stableWeight]);
+const manager = {
+  snapshot: {
+    scaleState: 'DISCONNECTED',
+    currentWeight: null,
+    stableWeight: null,
+    lastError: null,
+    config: loadConfig(),
+  } as ScaleSnapshot,
 
-  // Called on each reading – if weight changed, reset the timer; otherwise let it count
-  const handleWeightReading = useCallback((weight: number) => {
-    // Round to 3 decimal places – this is the number shown on screen
+  listeners: new Set<() => void>(),
+
+  port: null as SerialPort | null,
+  reader: null as ReadableStreamDefaultReader<string> | null,
+  running: false,
+
+  // Weight-lock tracking
+  lastReading: null as number | null,
+  lockTimer: null as ReturnType<typeof setTimeout> | null,
+
+  autoConnectAttempted: false,
+
+  emit() {
+    this.listeners.forEach((l) => l());
+  },
+
+  set(patch: Partial<ScaleSnapshot>) {
+    this.snapshot = { ...this.snapshot, ...patch };
+    this.emit();
+  },
+
+  subscribe(listener: () => void) {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  },
+
+  // Called on each reading – locks when weight stops moving
+  handleWeightReading(weight: number) {
     const displayNum = Math.round(weight * 1000) / 1000;
-    const prev = lastReadingRef.current;
-    lastReadingRef.current = displayNum;
+    const prev = this.lastReading;
+    this.lastReading = displayNum;
 
     const numberChanged = prev !== null && prev !== displayNum;
 
     if (numberChanged) {
-      // Displayed number changed – clear any pending lock, unlock if locked
-      lastChangedTime.current = Date.now();
-      if (lockTimerRef.current) {
-        clearTimeout(lockTimerRef.current);
-        lockTimerRef.current = null;
+      if (this.lockTimer) {
+        clearTimeout(this.lockTimer);
+        this.lockTimer = null;
       }
-      if (stableWeightRef.current) {
-        setStableWeight(null);
-        setScaleState('WEIGHING');
+      if (this.snapshot.stableWeight) {
+        this.set({ stableWeight: null, scaleState: 'WEIGHING' });
       }
     }
 
-    // If not already locked and display number > 0, schedule a lock
-    if (!stableWeightRef.current && displayNum > 0 && !lockTimerRef.current) {
-      lockTimerRef.current = setTimeout(() => {
-        lockTimerRef.current = null;
-        const current = lastReadingRef.current;
+    if (!this.snapshot.stableWeight && displayNum > 0 && !this.lockTimer) {
+      this.lockTimer = setTimeout(() => {
+        this.lockTimer = null;
+        const current = this.lastReading;
         if (current !== null && current > 0) {
-          const data: WeightData = {
-            weight: current,
-            stable: true,
-            timestamp: new Date(),
-          };
-          setCurrentWeight(data);
-          setStableWeight(data);
-          setScaleState('STABLE');
+          const data: WeightData = { weight: current, stable: true, timestamp: new Date() };
+          this.set({ currentWeight: data, stableWeight: data, scaleState: 'STABLE' });
         }
       }, STOP_MOVING_MS);
     }
 
-    // Zero on display – item removed, unlock
-    if (displayNum === 0 && stableWeightRef.current) {
-      setStableWeight(null);
-      setScaleState('WEIGHING');
-      if (lockTimerRef.current) {
-        clearTimeout(lockTimerRef.current);
-        lockTimerRef.current = null;
+    if (displayNum === 0 && this.snapshot.stableWeight) {
+      if (this.lockTimer) {
+        clearTimeout(this.lockTimer);
+        this.lockTimer = null;
       }
+      this.set({ stableWeight: null, scaleState: 'WEIGHING' });
     }
-  }, []);
+  },
 
-  // ── Core read loop (follows checklist §3 "Read Serial Data") ─────
-  const startReadLoop = useCallback(async (port: SerialPort) => {
+  async startReadLoop(port: SerialPort) {
     const textDecoder = new TextDecoderStream();
     // @ts-ignore
     const pipeClosed = port.readable!.pipeTo(textDecoder.writable);
     const reader = textDecoder.readable.getReader();
-    readerRef.current = reader;
+    this.reader = reader;
 
     let lineBuffer = '';
 
     try {
-      while (runningRef.current) {
+      while (this.running) {
         const { value, done } = await reader.read();
         if (done) break;
         if (!value) continue;
@@ -137,191 +153,198 @@ export function useScaleConnection() {
           const weight = numMatch ? parseFloat(numMatch[1]) : NaN;
           const displayWeight = isNaN(weight) ? 0 : weight;
 
-          setCurrentWeight({
-            weight: displayWeight,
-            stable: false,
-            timestamp: new Date(),
+          this.set({
+            currentWeight: { weight: displayWeight, stable: false, timestamp: new Date() },
+            scaleState: 'WEIGHING',
+            lastError: null,
           });
-          setScaleState('WEIGHING');
-          setLastError(null);
 
           if (!isNaN(weight)) {
-            handleWeightReading(weight);
+            this.handleWeightReading(weight);
           }
         }
       }
     } catch (e: unknown) {
-      if (runningRef.current) {
+      if (this.running) {
         const msg = e instanceof Error ? e.message : 'Serial read error';
         console.error('Serial read error:', e);
-        setLastError(msg);
+        this.set({ lastError: msg });
       }
     } finally {
       reader.releaseLock();
       await pipeClosed.catch(() => {});
     }
-  }, []);
+  },
 
-  // ── Open a port (shared by manual connect + auto-detect) ─────────
-  const openPort = useCallback(async (port: SerialPort) => {
-    await port.open({
-      baudRate: config.baudRate,
-      parity: config.parity,
-      stopBits: config.stopBits as 1 | 2,
-      dataBits: 8,
-    });
+  async openPort(port: SerialPort) {
+    const { baudRate, parity, stopBits } = this.snapshot.config;
+    // Already open on this port (e.g. remount after a route switch) – just reattach
+    if (this.port === port && this.running) {
+      this.emit();
+      return;
+    }
+    await port.open({ baudRate, parity, stopBits: stopBits as 1 | 2, dataBits: 8 });
 
-    portRef.current = port;
-    runningRef.current = true;
-    lastReadingRef.current = null;
-    lastChangedTime.current = Date.now();
-    setScaleState('CONNECTED');
-    setLastError(null);
+    this.port = port;
+    this.running = true;
+    this.lastReading = null;
+    this.set({ scaleState: 'CONNECTED', lastError: null });
 
-    startReadLoop(port).then(() => {
-      if (runningRef.current) {
-        setScaleState('DISCONNECTED');
-        setLastError('Serial connection ended unexpectedly');
+    this.startReadLoop(port).then(() => {
+      if (this.running) {
+        this.set({ scaleState: 'DISCONNECTED', lastError: 'Serial connection ended unexpectedly' });
       }
     });
-  }, [config, startReadLoop]);
+  },
 
-  // ── Checklist §3 "Request Port Access" ───────────────────────────
-  const connect = useCallback(async () => {
-    setLastError(null);
+  async connect() {
+    this.set({ lastError: null });
 
-    // Checklist §5: Check if ('serial' in navigator)
     if (!('serial' in navigator)) {
       const msg = 'Web Serial API not supported. Use Chrome or Edge.';
-      setLastError(msg);
+      this.set({ lastError: msg });
       toast({ title: 'Not Supported', description: msg, variant: 'destructive' });
       return;
     }
 
+    // Already connected – nothing to do
+    if (this.port && this.running) {
+      this.emit();
+      return;
+    }
+
     try {
-      // Checklist: port = await navigator.serial.requestPort()
       const port = await navigator.serial.requestPort();
-      await openPort(port);
-      toast({ title: 'Scale Connected', description: `Serial port opened at ${config.baudRate} baud` });
+      await this.openPort(port);
+      toast({ title: 'Scale Connected', description: `Serial port opened at ${this.snapshot.config.baudRate} baud` });
     } catch (e: unknown) {
-      // Checklist §5: Wrap port operations in try/catch
       const msg = e instanceof Error ? e.message : 'Failed to open serial port';
       console.error('Serial connect error:', e);
-      setLastError(msg);
-      setScaleState('DISCONNECTED');
+      this.set({ lastError: msg, scaleState: 'DISCONNECTED' });
       toast({ title: 'Connection Failed', description: msg, variant: 'destructive' });
     }
-  }, [config, openPort]);
+  },
 
-  // ── Disconnect ───────────────────────────────────────────────────
-  const disconnect = useCallback(async () => {
-    runningRef.current = false;
+  async disconnect() {
+    this.running = false;
 
-    if (readerRef.current) {
-      try { await readerRef.current.cancel(); } catch { /* ignore */ }
-      readerRef.current = null;
+    if (this.reader) {
+      try { await this.reader.cancel(); } catch { /* ignore */ }
+      this.reader = null;
     }
 
-    if (portRef.current) {
-      try { await portRef.current.close(); } catch { /* ignore */ }
-      portRef.current = null;
+    if (this.port) {
+      try { await this.port.close(); } catch { /* ignore */ }
+      this.port = null;
     }
 
-    setScaleState('DISCONNECTED');
-    setCurrentWeight(null);
-    setStableWeight(null);
-    lastReadingRef.current = null;
+    this.lastReading = null;
+    this.set({ scaleState: 'DISCONNECTED', currentWeight: null, stableWeight: null });
     toast({ title: 'Scale Disconnected', description: 'Serial port closed' });
-  }, []);
+  },
 
-  const resetForNextSale = useCallback(() => {
-    setStableWeight(null);
-    lastReadingRef.current = null;
-    lastChangedTime.current = Date.now();
-    if (lockTimerRef.current) {
-      clearTimeout(lockTimerRef.current);
-      lockTimerRef.current = null;
+  resetForNextSale() {
+    this.lastReading = null;
+    if (this.lockTimer) {
+      clearTimeout(this.lockTimer);
+      this.lockTimer = null;
     }
-    if (scaleState === 'STABLE') setScaleState('CONNECTED');
-  }, [scaleState]);
+    this.set({
+      stableWeight: null,
+      scaleState: this.snapshot.scaleState === 'STABLE' ? 'CONNECTED' : this.snapshot.scaleState,
+    });
+  },
 
-  const updateConfig = useCallback((newConfig: Partial<ScaleConfig>) => {
-    const updated = { ...config, ...newConfig };
-    setConfig(updated);
+  updateConfig(newConfig: Partial<ScaleConfig>) {
+    const updated = { ...this.snapshot.config, ...newConfig };
     localStorage.setItem('scaleConfig', JSON.stringify(updated));
-  }, [config]);
+    this.set({ config: updated });
+  },
 
-  // ── Auto-detect previously authorized port on startup ────────────
-  useEffect(() => {
+  // Auto-detect a previously authorized port once per app lifetime
+  async autoConnect() {
+    if (this.autoConnectAttempted) return;
+    this.autoConnectAttempted = true;
     if (!('serial' in navigator)) return;
+    if (this.port && this.running) return;
 
-    const autoConnect = async () => {
-      try {
-        const ports = await navigator.serial.getPorts();
-        if (ports.length > 0) {
-          console.log('[Scale] Auto-detecting previously authorized port…');
-          await openPort(ports[0]);
-          toast({ title: 'Scale Auto-Connected', description: `Resumed serial at ${config.baudRate} baud` });
-        }
-      } catch (e) {
-        console.log('[Scale] Auto-connect skipped:', e);
+    try {
+      const ports = await navigator.serial.getPorts();
+      if (ports.length > 0) {
+        console.log('[Scale] Auto-detecting previously authorized port…');
+        await this.openPort(ports[0]);
+        toast({ title: 'Scale Auto-Connected', description: `Resumed serial at ${this.snapshot.config.baudRate} baud` });
       }
-    };
-    autoConnect();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    } catch (e) {
+      console.log('[Scale] Auto-connect skipped:', e);
+    }
+  },
 
-  // ── Checklist §6 "Cleanup" – close port on page unload only ─────
-  useEffect(() => {
-    const cleanup = () => {
-      runningRef.current = false;
-      if (readerRef.current) {
-        try { readerRef.current.cancel(); } catch { /* ignore */ }
+  setupGlobalListeners() {
+    // Close port only on full page unload
+    window.addEventListener('beforeunload', () => {
+      this.running = false;
+      if (this.reader) {
+        try { this.reader.cancel(); } catch { /* ignore */ }
       }
-      if (portRef.current) {
-        try { portRef.current.close(); } catch { /* ignore */ }
+      if (this.port) {
+        try { this.port.close(); } catch { /* ignore */ }
       }
-    };
+    });
 
-    window.addEventListener('beforeunload', cleanup);
-    return () => {
-      window.removeEventListener('beforeunload', cleanup);
-      // Do NOT close port on unmount – keep connection alive across tab switches
-    };
-  }, []);
-
-  // ── Checklist §5 "Handle disconnect events" ─────────────────────
-  useEffect(() => {
     if (!('serial' in navigator)) return;
-
-    const onDisconnect = (e: Event) => {
+    navigator.serial.addEventListener('disconnect', (e: Event) => {
       const disconnectedPort = (e as any).target;
-      if (disconnectedPort === portRef.current) {
+      if (disconnectedPort === this.port) {
         console.log('[Scale] Port disconnected');
-        runningRef.current = false;
-        portRef.current = null;
-        readerRef.current = null;
-        setScaleState('DISCONNECTED');
-        setCurrentWeight(null);
-        setStableWeight(null);
-        setLastError('Scale was disconnected');
+        this.running = false;
+        this.port = null;
+        this.reader = null;
+        this.set({
+          scaleState: 'DISCONNECTED',
+          currentWeight: null,
+          stableWeight: null,
+          lastError: 'Scale was disconnected',
+        });
         toast({ title: 'Scale Disconnected', description: 'The serial device was removed', variant: 'destructive' });
       }
-    };
+    });
+  },
+};
 
-    navigator.serial.addEventListener('disconnect', onDisconnect);
-    return () => navigator.serial.removeEventListener('disconnect', onDisconnect);
-  }, []);
+let globalListenersReady = false;
+function ensureGlobalSetup() {
+  if (globalListenersReady || typeof window === 'undefined') return;
+  globalListenersReady = true;
+  manager.setupGlobalListeners();
+  void manager.autoConnect();
+}
+
+// ── Hook: subscribes to the shared singleton ────────────────────────
+export function useScaleConnection() {
+  ensureGlobalSetup();
+
+  const snapshot = useSyncExternalStore(
+    (cb) => manager.subscribe(cb),
+    () => manager.snapshot,
+  );
+
+  const connect = useCallback(() => manager.connect(), []);
+  const disconnect = useCallback(() => manager.disconnect(), []);
+  const resetForNextSale = useCallback(() => manager.resetForNextSale(), []);
+  const updateConfig = useCallback((c: Partial<ScaleConfig>) => manager.updateConfig(c), []);
+  const setConfig = useCallback((c: ScaleConfig) => manager.updateConfig(c), []);
 
   return {
-    scaleState,
-    isConnected: scaleState !== 'DISCONNECTED',
-    isStable: scaleState === 'STABLE',
-    isWeighing: scaleState === 'WEIGHING',
-    currentWeight,
-    stableWeight,
-    config,
-    lastError,
+    scaleState: snapshot.scaleState,
+    isConnected: snapshot.scaleState !== 'DISCONNECTED',
+    isStable: snapshot.scaleState === 'STABLE',
+    isWeighing: snapshot.scaleState === 'WEIGHING',
+    currentWeight: snapshot.currentWeight,
+    stableWeight: snapshot.stableWeight,
+    config: snapshot.config,
+    setConfig,
+    lastError: snapshot.lastError,
     connect,
     disconnect,
     resetForNextSale,
