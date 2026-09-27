@@ -149,8 +149,10 @@ const manager = {
 
           console.log('[Scale raw]', JSON.stringify(trimmed));
 
-          const numMatch = trimmed.match(/([+-]?\d+\.?\d*)/);
-          const weight = numMatch ? parseFloat(numMatch[1]) : NaN;
+          // Take the LAST numeric group in the line – ACLAS frames often
+          // carry prefixes (status/PLU digits) before the actual weight.
+          const numMatches = trimmed.match(/[+-]?\d+\.?\d*/g);
+          const weight = numMatches ? parseFloat(numMatches[numMatches.length - 1]) : NaN;
           const displayWeight = isNaN(weight) ? 0 : weight;
 
           this.set({
