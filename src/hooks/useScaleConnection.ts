@@ -131,7 +131,11 @@ const manager = {
     const reader = textDecoder.readable.getReader();
     this.reader = reader;
 
-    let lineBuffer = '';
+    // The ACLAS PS6X streams a continuous, space-separated flow of frames
+    // like " 0.000KGqS 0.000KGqS …" with NO line breaks. We keep a small
+    // rolling buffer of the latest characters and extract the weight from
+    // the most recent complete "<number>KG" frame in the stream.
+    let streamTail = '';
 
     try {
       while (this.running) {
@@ -139,32 +143,24 @@ const manager = {
         if (done) break;
         if (!value) continue;
 
-        lineBuffer += value;
-        const lines = lineBuffer.split(/[\r\n]+/);
-        lineBuffer = lines.pop() || '';
+        streamTail = (streamTail + value).slice(-256);
 
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed) continue;
+        // Match every "<number>KG" frame; the LAST one is the latest reading.
+        const frames = streamTail.match(/[+-]?\d+\.?\d*\s*KG/gi);
+        if (!frames || frames.length === 0) continue;
 
-          console.log('[Scale raw]', JSON.stringify(trimmed));
+        const latestFrame = frames[frames.length - 1];
+        const numMatch = latestFrame.match(/[+-]?\d+\.?\d*/);
+        const weight = numMatch ? parseFloat(numMatch[0]) : NaN;
+        if (isNaN(weight)) continue;
 
-          // Take the LAST numeric group in the line – ACLAS frames often
-          // carry prefixes (status/PLU digits) before the actual weight.
-          const numMatches = trimmed.match(/[+-]?\d+\.?\d*/g);
-          const weight = numMatches ? parseFloat(numMatches[numMatches.length - 1]) : NaN;
-          const displayWeight = isNaN(weight) ? 0 : weight;
+        this.set({
+          currentWeight: { weight, stable: false, timestamp: new Date() },
+          scaleState: 'WEIGHING',
+          lastError: null,
+        });
 
-          this.set({
-            currentWeight: { weight: displayWeight, stable: false, timestamp: new Date() },
-            scaleState: 'WEIGHING',
-            lastError: null,
-          });
-
-          if (!isNaN(weight)) {
-            this.handleWeightReading(weight);
-          }
-        }
+        this.handleWeightReading(weight);
       }
     } catch (e: unknown) {
       if (this.running) {
