@@ -300,6 +300,59 @@ export const salesDB = {
     return id;
   },
 
+  async update(sale: Sale): Promise<void> {
+    if (sale.id === undefined) throw new Error('Sale not found');
+
+    const db = await getDB();
+    const tx = db.transaction(['sales', 'products'], 'readwrite');
+    const salesStore = tx.objectStore('sales');
+    const productsStore = tx.objectStore('products');
+    const previousSale = await salesStore.get(sale.id);
+
+    if (!previousSale) {
+      throw new Error('Sale not found');
+    }
+
+    const previousProduct = await productsStore.get(previousSale.productId);
+    const nextProduct = previousSale.productId === sale.productId
+      ? previousProduct
+      : await productsStore.get(sale.productId);
+
+    if (!previousProduct || !nextProduct) {
+      throw new Error('Product not found');
+    }
+
+    const availableForSale = nextProduct.currentStock +
+      (previousProduct.id === nextProduct.id ? previousSale.quantity : 0);
+    if (availableForSale < sale.quantity) {
+      throw new Error(`Insufficient stock. Available: ${availableForSale}, Requested: ${sale.quantity}`);
+    }
+
+    if (previousProduct.id === nextProduct.id) {
+      await productsStore.put({
+        ...nextProduct,
+        currentStock: availableForSale - sale.quantity,
+        updatedAt: new Date(),
+      });
+    } else {
+      await Promise.all([
+        productsStore.put({
+          ...previousProduct,
+          currentStock: previousProduct.currentStock + previousSale.quantity,
+          updatedAt: new Date(),
+        }),
+        productsStore.put({
+          ...nextProduct,
+          currentStock: nextProduct.currentStock - sale.quantity,
+          updatedAt: new Date(),
+        }),
+      ]);
+    }
+
+    await salesStore.put(sale);
+    await tx.done;
+  },
+
   async getByDateRange(startDate: Date, endDate: Date): Promise<Sale[]> {
     const db = await getDB();
     const sales = await db.getAll('sales');

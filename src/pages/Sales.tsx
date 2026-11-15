@@ -31,11 +31,13 @@ export default function Sales() {
   const [sales, setSales] = useState<Sale[]>([]);
   const [excessSales, setExcessSales] = useState<ExcessSale[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [editingSale, setEditingSale] = useState<Sale | null>(null);
   const [isExcessDialogOpen, setIsExcessDialogOpen] = useState(false);
   const [editingExcess, setEditingExcess] = useState<ExcessSale | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [calendarOpen, setCalendarOpen] = useState(false);
+  const [saleDate, setSaleDate] = useState(format(new Date(), "yyyy-MM-dd"));
 
   const [formData, setFormData] = useState({
     productId: "",
@@ -78,12 +80,31 @@ export default function Sales() {
   };
 
   const resetForm = () => {
+    setEditingSale(null);
     setFormData({
       productId: "",
       totalAmount: "",
       notes: "",
     });
     setSelectedProduct(null);
+  };
+
+  const openNewSale = () => {
+    resetForm();
+    setSaleDate(format(selectedDate, "yyyy-MM-dd"));
+    setIsDialogOpen(true);
+  };
+
+  const handleEditSale = (sale: Sale) => {
+    setEditingSale(sale);
+    setSelectedProduct(products.find((product) => product.id === sale.productId) || null);
+    setFormData({
+      productId: sale.productId.toString(),
+      totalAmount: sale.totalAmount.toString(),
+      notes: sale.notes || "",
+    });
+    setSaleDate(format(sale.date, "yyyy-MM-dd"));
+    setIsDialogOpen(true);
   };
 
   const handleProductSelect = (productId: string) => {
@@ -109,49 +130,73 @@ export default function Sales() {
       return;
     }
 
+    if (selectedProduct.id === undefined) {
+      toast({ title: "Error", description: "Please select a valid product", variant: "destructive" });
+      return;
+    }
+
     const totalAmount = parseFloat(formData.totalAmount);
     const quantity = calculateQuantity();
+    if (!Number.isFinite(totalAmount) || totalAmount <= 0 || !Number.isFinite(quantity) || quantity <= 0) {
+      toast({ title: "Error", description: "Please enter a valid sale amount", variant: "destructive" });
+      return;
+    }
 
-    if (quantity > selectedProduct.currentStock) {
+    const availableStock = selectedProduct.currentStock +
+      (editingSale?.productId === selectedProduct.id ? editingSale.quantity : 0);
+    if (quantity > availableStock) {
       toast({
         title: "Insufficient Stock",
-        description: `Only ${selectedProduct.currentStock} units available`,
+        description: `Only ${availableStock} units available`,
         variant: "destructive",
       });
       return;
     }
 
     try {
-      // Use selected date but with current time
-      const saleDate = new Date(selectedDate);
-      const now = new Date();
-      saleDate.setHours(now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds());
+      const [year, month, day] = saleDate.split("-").map(Number);
+      const recordedDate = new Date(year, month - 1, day);
+      if (editingSale) {
+        recordedDate.setHours(
+          editingSale.date.getHours(),
+          editingSale.date.getMinutes(),
+          editingSale.date.getSeconds(),
+          editingSale.date.getMilliseconds(),
+        );
+      } else {
+        const now = new Date();
+        recordedDate.setHours(now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds());
+      }
 
       const saleData = {
-        productId: selectedProduct.id!,
+        productId: selectedProduct.id,
         productName: selectedProduct.name,
         quantity,
         unitPrice: selectedProduct.sellingPrice,
         totalAmount,
-        date: saleDate,
+        date: recordedDate,
         notes: formData.notes,
       };
 
-      await salesDB.add(saleData);
+      if (editingSale) {
+        await salesDB.update({ ...saleData, id: editingSale.id });
+      } else {
+        await salesDB.add(saleData);
+      }
 
       toast({
         title: "Success",
-        description: "Sale recorded successfully",
+        description: editingSale ? "Sale updated successfully" : "Sale recorded successfully",
       });
 
       setIsDialogOpen(false);
       resetForm();
       loadData();
-    } catch (error: any) {
-      console.error("Error recording sale:", error);
+    } catch (error) {
+      console.error("Error saving sale:", error);
       toast({
         title: "Error",
-        description: error.message || "Failed to record sale",
+        description: error instanceof Error ? error.message : "Failed to save sale",
         variant: "destructive",
       });
     }
@@ -302,7 +347,7 @@ export default function Sales() {
             <Plus className="h-4 w-4" />
             Record Excess
           </Button>
-          <Button onClick={() => setIsDialogOpen(true)} className="gap-2">
+          <Button onClick={openNewSale} className="gap-2">
             <ShoppingCart className="h-4 w-4" />
             Record Sale
           </Button>
@@ -350,7 +395,7 @@ export default function Sales() {
             {filteredSales.map((sale) => (
               <div
                 key={sale.id}
-                className="flex items-center justify-between rounded-lg bg-primary/5 p-4"
+                className="flex flex-col gap-3 rounded-lg bg-primary/5 p-4 sm:flex-row sm:items-center sm:justify-between"
               >
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
@@ -366,13 +411,26 @@ export default function Sales() {
                     <p className="text-sm text-muted-foreground mt-1 italic">{sale.notes}</p>
                   )}
                 </div>
-                <div className="text-right">
+                <div className="flex items-center justify-between gap-4 sm:justify-end">
+                  <div className="text-right">
                   <p className="text-lg font-bold text-primary">
                     KSh {sale.totalAmount.toLocaleString()}
                   </p>
                   <p className="text-xs text-muted-foreground">
                     @ KSh {sale.unitPrice} each
                   </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    aria-label={`Edit sale for ${sale.productName}`}
+                    title="Edit sale"
+                    className="h-9 w-9 shrink-0 text-muted-foreground hover:text-primary"
+                    onClick={() => handleEditSale(sale)}
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </Button>
                 </div>
               </div>
             ))}
@@ -382,7 +440,7 @@ export default function Sales() {
             <ShoppingCart className="h-16 w-16 mx-auto mb-4 text-muted-foreground opacity-50" />
             <h3 className="text-lg font-semibold text-foreground mb-2">No sales yet</h3>
             <p className="text-muted-foreground mb-4">Start recording your first sale</p>
-            <Button onClick={() => setIsDialogOpen(true)} className="gap-2">
+            <Button onClick={openNewSale} className="gap-2">
               <ShoppingCart className="h-4 w-4" />
               Record Sale
             </Button>
@@ -450,10 +508,13 @@ export default function Sales() {
           </div>
         )}
       </GlassCard>
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+      <Dialog open={isDialogOpen} onOpenChange={(open) => {
+        setIsDialogOpen(open);
+        if (!open) resetForm();
+      }}>
         <DialogContent className="glass-strong max-w-md">
           <DialogHeader>
-            <DialogTitle>Record New Sale</DialogTitle>
+            <DialogTitle>{editingSale ? "Edit Sale" : "Record New Sale"}</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
@@ -464,8 +525,8 @@ export default function Sales() {
                 </SelectTrigger>
                 <SelectContent>
                   {products.map((product) => (
-                    <SelectItem key={product.id} value={product.id!.toString()}>
-                      {product.name} (Stock: {product.currentStock})
+                    <SelectItem key={product.id} value={product.id?.toString() || ""}>
+                      {product.name} (Stock: {product.currentStock + (editingSale?.productId === product.id ? editingSale.quantity : 0)})
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -484,9 +545,21 @@ export default function Sales() {
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Available Stock:</span>
                     <span className="font-semibold text-foreground">
-                      {selectedProduct.currentStock} units
+                      {selectedProduct.currentStock + (editingSale?.productId === selectedProduct.id ? editingSale.quantity : 0)} units
                     </span>
                   </div>
+                </div>
+
+                <div>
+                  <Label htmlFor="saleDate">Date</Label>
+                  <Input
+                    id="saleDate"
+                    type="date"
+                    value={saleDate}
+                    max={format(new Date(), "yyyy-MM-dd")}
+                    onChange={(event) => setSaleDate(event.target.value)}
+                    required
+                  />
                 </div>
 
                 <div>
@@ -539,8 +612,8 @@ export default function Sales() {
               >
                 Cancel
               </Button>
-              <Button type="submit" disabled={!selectedProduct || !formData.totalAmount}>
-                Record Sale
+              <Button type="submit" disabled={!selectedProduct || !formData.totalAmount || !saleDate}>
+                {editingSale ? "Update Sale" : "Record Sale"}
               </Button>
             </div>
           </form>
